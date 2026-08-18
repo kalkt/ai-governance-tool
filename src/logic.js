@@ -23,6 +23,7 @@ export function getApplicableModules(profile) {
 export function getQuestionsForAssessment(profile, depth) {
   var modules = getApplicableModules(profile);
   var pool = [];
+  // base is always present per getApplicableModules, this branch is defensive and intentionally untested
   if (modules.indexOf('base') !== -1) pool = pool.concat(BASE_QUESTIONS);
   if (modules.indexOf('nonprofit') !== -1) pool = pool.concat(NONPROFIT_QUESTIONS);
   if (modules.indexOf('youth') !== -1) pool = pool.concat(YOUTH_QUESTIONS);
