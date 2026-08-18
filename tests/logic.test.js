@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeTier, computeScores } from '../src/logic.js';
+import { computeTier, computeScores, identifyGaps } from '../src/logic.js';
 
 describe('computeTier', () => {
   it('classifies a score of exactly 70 as low risk (lower boundary of the low tier)', () => {
@@ -99,5 +99,71 @@ describe('computeScores', () => {
     const questions = [{ id: 'g1', fn: 'govern' }];
     const result = computeScores(questions, { g1: 2 });
     expect(result.overall).toBe(67);
+  });
+});
+
+describe('identifyGaps', () => {
+  it('returns no gaps when there are no questions', () => {
+    expect(identifyGaps([], {})).toEqual([]);
+  });
+
+  it('returns no gaps when no questions have been answered', () => {
+    const questions = [{ id: 'g1', fn: 'govern', module: 'base' }];
+    expect(identifyGaps(questions, {})).toEqual([]);
+  });
+
+  it('treats an unanswered question as not a gap, distinguishing it from an answered value of 0', () => {
+    const questions = [
+      { id: 'g1', fn: 'govern', module: 'base' },
+      { id: 'g2', fn: 'govern', module: 'base' }
+    ];
+    const gaps = identifyGaps(questions, { g1: 0 });
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].q.id).toBe('g1');
+  });
+
+  it('flags an answer of 0 as a high-priority gap', () => {
+    const questions = [{ id: 'g1', fn: 'govern', module: 'base' }];
+    const gaps = identifyGaps(questions, { g1: 0 });
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].priority).toBe('high');
+    expect(gaps[0].v).toBe(0);
+  });
+
+  it('flags an answer of 1 as a medium-priority gap', () => {
+    const questions = [{ id: 'g1', fn: 'govern', module: 'base' }];
+    const gaps = identifyGaps(questions, { g1: 1 });
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].priority).toBe('medium');
+    expect(gaps[0].v).toBe(1);
+  });
+
+  it('does not flag an answer of 2 as a gap, just above the gap threshold', () => {
+    const questions = [{ id: 'g1', fn: 'govern', module: 'base' }];
+    expect(identifyGaps(questions, { g1: 2 })).toEqual([]);
+  });
+
+  it('does not flag an answer of 3 as a gap', () => {
+    const questions = [{ id: 'g1', fn: 'govern', module: 'base' }];
+    expect(identifyGaps(questions, { g1: 3 })).toEqual([]);
+  });
+
+  it('preserves the function, module, and original question on each gap', () => {
+    const question = { id: 'np1', fn: 'govern', module: 'nonprofit', extra: 'field' };
+    const gaps = identifyGaps([question], { np1: 1 });
+    expect(gaps[0].fn).toBe('govern');
+    expect(gaps[0].module).toBe('nonprofit');
+    expect(gaps[0].q).toBe(question);
+  });
+
+  it('returns gaps in the same order as the input questions, not grouped or sorted', () => {
+    const questions = [
+      { id: 'g1', fn: 'govern', module: 'base' },
+      { id: 'm1', fn: 'map', module: 'base' },
+      { id: 'me1', fn: 'measure', module: 'base' }
+    ];
+    const answers = { g1: 1, m1: 3, me1: 0 };
+    const gaps = identifyGaps(questions, answers);
+    expect(gaps.map(g => g.q.id)).toEqual(['g1', 'me1']);
   });
 });
