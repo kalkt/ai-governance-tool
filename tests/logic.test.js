@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeTier, computeScores, identifyGaps } from '../src/logic.js';
+import { computeTier, computeScores, identifyGaps, buildRecommendations } from '../src/logic.js';
+import { REC_TITLES, REC_BODIES, FRAMEWORK } from '../src/data.js';
 
 describe('computeTier', () => {
   it('classifies a score of exactly 70 as low risk (lower boundary of the low tier)', () => {
@@ -165,5 +166,81 @@ describe('identifyGaps', () => {
     const answers = { g1: 1, m1: 3, me1: 0 };
     const gaps = identifyGaps(questions, answers);
     expect(gaps.map(g => g.q.id)).toEqual(['g1', 'me1']);
+  });
+});
+
+describe('buildRecommendations', () => {
+  it('returns no recommendations when there are no gaps', () => {
+    expect(buildRecommendations([])).toEqual([]);
+  });
+
+  it('orders high-priority recommendations before medium-priority ones regardless of input order', () => {
+    const gaps = [
+      { fn: 'govern', v: 1, priority: 'medium', q: { id: 'g1', module: 'base' } },
+      { fn: 'map', v: 0, priority: 'high', q: { id: 'm1', module: 'base' } }
+    ];
+    const recs = buildRecommendations(gaps);
+    expect(recs.map(r => r.priority)).toEqual(['high', 'medium']);
+  });
+
+  it('deduplicates recommendations by question id, keeping only the first occurrence', () => {
+    const gaps = [
+      { fn: 'govern', v: 0, priority: 'high', q: { id: 'g1', module: 'base' } },
+      { fn: 'govern', v: 0, priority: 'high', q: { id: 'g1', module: 'base' } }
+    ];
+    const recs = buildRecommendations(gaps);
+    expect(recs).toHaveLength(1);
+  });
+
+  it('prioritizes the high-priority version of a duplicated question over its medium-priority duplicate', () => {
+    const gaps = [
+      { fn: 'govern', v: 1, priority: 'medium', q: { id: 'g1', module: 'base' } },
+      { fn: 'govern', v: 0, priority: 'high', q: { id: 'g1', module: 'base' } }
+    ];
+    const recs = buildRecommendations(gaps);
+    expect(recs).toHaveLength(1);
+    expect(recs[0].priority).toBe('high');
+  });
+
+  it('uses the REC_TITLES entry for a known question id', () => {
+    const gaps = [{ fn: 'govern', v: 0, priority: 'high', q: { id: 'g1', module: 'base' } }];
+    const recs = buildRecommendations(gaps);
+    expect(recs[0].title).toBe(REC_TITLES.g1);
+  });
+
+  it('falls back to a generic title when the question id has no entry in REC_TITLES', () => {
+    const gaps = [{ fn: 'govern', v: 0, priority: 'high', q: { id: 'unknown-id', module: 'base' } }];
+    const recs = buildRecommendations(gaps);
+    expect(recs[0].title).toBe('Address this gap');
+  });
+
+  it('uses the REC_BODIES entry for a known question id instead of the generated fallback body', () => {
+    const gaps = [{ fn: 'govern', v: 0, priority: 'high', q: { id: 'np1', module: 'nonprofit' } }];
+    const recs = buildRecommendations(gaps);
+    expect(recs[0].body).toBe(REC_BODIES.np1);
+  });
+
+  it('generates a fallback body stating no baseline is in place when the answer value is 0', () => {
+    const gaps = [{ fn: 'govern', v: 0, priority: 'high', q: { id: 'unknown-id', module: 'base' } }];
+    const recs = buildRecommendations(gaps);
+    expect(recs[0].body).toMatch(/^No baseline in place today\./);
+  });
+
+  it('generates a fallback body stating a partial baseline exists when the answer value is nonzero', () => {
+    const gaps = [{ fn: 'govern', v: 1, priority: 'medium', q: { id: 'unknown-id', module: 'base' } }];
+    const recs = buildRecommendations(gaps);
+    expect(recs[0].body).toMatch(/^A partial baseline exists\./);
+  });
+
+  it('includes the NIST function display name in the generated fallback body', () => {
+    const gaps = [{ fn: 'manage', v: 0, priority: 'high', q: { id: 'unknown-id', module: 'base' } }];
+    const recs = buildRecommendations(gaps);
+    expect(recs[0].body).toContain(FRAMEWORK.functions.manage.name);
+  });
+
+  it("takes the recommendation's module from the nested question object, not the gap's own module field", () => {
+    const gaps = [{ fn: 'govern', module: 'base', v: 0, priority: 'high', q: { id: 'np1', module: 'nonprofit' } }];
+    const recs = buildRecommendations(gaps);
+    expect(recs[0].module).toBe('nonprofit');
   });
 });
