@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Governance Readiness Assessment for SMBs</title>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --surface: #ffffff;
+    --surface-alt: #f4f2ec;
+    --text: #1a1a1a;
+    --text-secondary: #5f5e5a;
+    --text-muted: #888780;
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.16);
+    --accent: #185FA5;
+    --accent-bg: #E6F1FB;
+    --accent-text: #0C447C;
+    --success-bg: #EAF3DE;
+    --success-text: #27500A;
+    --warning-bg: #FAEEDA;
+    --warning-text: #633806;
+    --danger-bg: #FCEBEB;
+    --danger-text: #791F1F;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .container { max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  .hero { margin-bottom: 1.5rem; }
+  .kicker { font-size: 12px; color: var(--accent); letter-spacing: 0.04em; text-transform: uppercase; margin: 0 0 6px; font-weight: 500; }
+  h1 { font-size: 28px; font-weight: 500; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 18px; font-weight: 500; margin: 0 0 10px; }
+  .lede { font-size: 15px; color: var(--text-secondary); margin: 0; }
+
+  .stepper { display: flex; align-items: center; gap: 8px; margin-bottom: 1.5rem; font-size: 12px; color: var(--text-muted); }
+  .step { display: flex; align-items: center; gap: 6px; }
+  .step.active { color: var(--accent); font-weight: 500; }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+  .step.active .step-dot { background: var(--accent); }
+  .step.complete .step-dot { background: var(--success-text); }
+  .step-sep { color: var(--text-muted); }
+
+  .profile-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+  .field-group { margin-bottom: 1.25rem; }
+  .field-group:last-child { margin-bottom: 0; }
+  .field-label { display: block; font-size: 14px; font-weight: 500; margin: 0 0 6px; }
+  .field-hint { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
+  .field-required { color: var(--danger-text); }
+
+  .radio-row, .checkbox-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .radio-opt, .check-opt {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border: 0.5px solid var(--border); border-radius: var(--radius);
+    cursor: pointer; font-size: 14px; background: transparent; transition: all 0.12s;
+  }
+  .radio-opt:hover, .check-opt:hover { border-color: var(--border-strong); }
+  .radio-opt.selected, .check-opt.selected { border: 2px solid var(--accent); padding: calc(8px - 1.5px) calc(14px - 1.5px); background: var(--accent-bg); }
+  .radio-opt input, .check-opt input { margin: 0; }
+
+  select, input[type="text"] {
+    width: 100%; padding: 8px 12px; border: 0.5px solid var(--border); border-radius: var(--radius);
+    font: inherit; background: var(--surface); color: var(--text);
+  }
+  select:focus, input[type="text"]:focus { outline: none; border-color: var(--accent); }
+
+  .tools-search { position: relative; margin-bottom: 1rem; }
+  .tools-search input { padding-left: 32px; }
+  .tools-search::before {
+    content: '⌕'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); font-size: 16px;
+  }
+  .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; margin-bottom: 1rem; }
+  .tool-card {
+    display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+    border: 0.5px solid var(--border); border-radius: var(--radius); cursor: pointer;
+    background: transparent; text-align: left; transition: all 0.12s;
+  }
+  .tool-card:hover { border-color: var(--border-strong); }
+  .tool-card.selected { border: 2px solid var(--accent); padding: calc(10px - 1.5px) calc(12px - 1.5px); background: var(--accent-bg); }
+  .tool-card input { margin: 3px 0 0 0; }
+  .tool-info { flex: 1; min-width: 0; }
+  .tool-name { font-size: 13px; font-weight: 500; margin: 0 0 2px; }
+  .tool-meta { font-size: 11px; color: var(--text-muted); margin: 0; }
+  .tool-badge { font-size: 10px; padding: 1px 6px; border-radius: var(--radius); margin-left: 4px; font-weight: 500; vertical-align: 1px; }
+  .tool-badge.high { background: var(--danger-bg); color: var(--danger-text); }
+  .tool-badge.caution { background: var(--warning-bg); color: var(--warning-text); }
+  .tool-badge.low { background: var(--success-bg); color: var(--success-text); }
+
+  .other-tool-input { display: flex; gap: 8px; margin-bottom: 1rem; }
+  .other-tool-input input { flex: 1; }
+  .other-tool-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .other-tag {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    background: var(--accent-bg); color: var(--accent-text); border-radius: var(--radius); font-size: 12px;
+  }
+  .other-tag button { background: none; border: none; color: inherit; cursor: pointer; padding: 0; font-size: 14px; line-height: 1; }
+
+  .choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 1.25rem 0 1rem; }
+  .choice {
+    background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px;
+    padding: 1rem 1.25rem; cursor: pointer; text-align: left; font: inherit; color: inherit;
+    transition: border-color 0.12s;
+  }
+  .choice:hover { border-color: var(--border-strong); }
+  .choice.selected { border: 2px solid var(--accent); padding: calc(1rem - 1.5px) calc(1.25rem - 1.5px); }
+  .choice h3 { font-size: 15px; font-weight: 500; margin: 0 0 6px; }
+  .meta { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
+  .choice p { font-size: 13px; color: var(--text-secondary); margin: 0; }
+  .badge { display: inline-block; background: var(--accent-bg); color: var(--accent-text); font-size: 11px; padding: 2px 8px; border-radius: var(--radius); margin-left: 6px; vertical-align: 2px; }
+
+  .callout {
+    background: var(--surface-alt); border-radius: var(--radius); padding: 12px 14px;
+    font-size: 13px; color: var(--text-secondary); margin: 0.75rem 0 1rem; line-height: 1.5;
+  }
+  .callout strong { color: var(--text); font-weight: 500; }
+  .callout.info { background: var(--accent-bg); color: var(--accent-text); }
+  .callout.info strong { color: var(--accent-text); }
+  .callout.warning { background: var(--warning-bg); color: var(--warning-text); }
+  .callout.warning strong { color: var(--warning-text); }
+
+  button {
+    background: var(--surface); border: 0.5px solid var(--border-strong); border-radius: var(--radius);
+    padding: 8px 16px; font: inherit; color: var(--text); cursor: pointer; transition: background 0.12s;
+  }
+  button:hover:not(:disabled) { background: var(--surface-alt); }
+  button:active:not(:disabled) { transform: scale(0.98); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary { background: var(--text); color: white; border-color: var(--text); }
+  button.primary:hover:not(:disabled) { background: #333; }
+
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 0.5rem; }
+
+  .qcard { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+  .qhead { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+  .qmodule { display: inline-block; padding: 1px 8px; background: var(--accent-bg); color: var(--accent-text); border-radius: var(--radius); font-size: 11px; font-weight: 500; }
+  .progress { height: 4px; background: var(--surface-alt); border-radius: 2px; overflow: hidden; margin-bottom: 16px; }
+  .progress span { display: block; height: 100%; background: var(--accent); width: 0; transition: width 0.2s; }
+  .qtext { font-size: 17px; font-weight: 500; margin: 0 0 4px; }
+  .qmeta { font-size: 13px; color: var(--text-muted); margin: 0 0 14px; }
+
+  .options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .opt {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    border: 0.5px solid var(--border); border-radius: var(--radius);
+    cursor: pointer; font-size: 14px; background: transparent;
+  }
+  .opt:hover { border-color: var(--border-strong); }
+  .opt.selected { border: 2px solid var(--accent); padding: calc(10px - 1.5px) calc(14px - 1.5px); background: var(--accent-bg); }
+  .opt input { margin: 0; }
+
+  .err { color: var(--danger-text); font-size: 13px; margin: 6px 0 0; }
+  .nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; }
+  .nav .spacer { flex: 1; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 1rem 0 1.25rem; }
+  .stat { background: var(--surface-alt); border-radius: var(--radius); padding: 1rem 1.25rem; }
+  .stat-label { font-size: 12px; color: var(--text-secondary); margin: 0 0 4px; }
+  .stat-value { font-size: 28px; font-weight: 500; margin: 0; }
+  .stat-value.small { font-size: 16px; padding-top: 4px; }
+
+  .tier-pill { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 500; }
+  .tier-low { background: var(--success-bg); color: var(--success-text); }
+  .tier-med { background: var(--warning-bg); color: var(--warning-text); }
+  .tier-high { background: var(--danger-bg); color: var(--danger-text); }
+
+  .section { margin: 1.5rem 0; }
+
+  .fn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .fn { background: var(--surface-alt); border-radius: var(--radius); padding: 12px 14px; }
+  .fn-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .fn h3 { font-size: 14px; font-weight: 500; margin: 0; }
+  .fn-score { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+  .bar { height: 4px; background: var(--surface); border-radius: 2px; overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--accent); width: 0; transition: width 0.4s; }
+  .fn-desc { font-size: 11px; color: var(--text-muted); margin: 6px 0 0; }
+
+  .rec { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; }
+  .rec-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
+  .rec-title { font-size: 14px; font-weight: 500; margin: 0; }
+  .rec-meta { font-size: 11px; color: var(--text-muted); margin: 0 0 6px; }
+  .rec-body { font-size: 13px; color: var(--text-secondary); margin: 0; }
+  .rec-source { font-size: 11px; color: var(--text-muted); margin: 6px 0 0; font-style: italic; }
+  .prio-high { background: var(--danger-bg); color: var(--danger-text); font-size: 11px; padding: 2px 8px; border-radius: var(--radius); white-space: nowrap; font-weight: 500; }
+  .prio-med { background: var(--warning-bg); color: var(--warning-text); font-size: 11px; padding: 2px 8px; border-radius: var(--radius); white-space: nowrap; font-weight: 500; }
+  .prio-low { background: var(--success-bg); color: var(--success-text); font-size: 11px; padding: 2px 8px; border-radius: var(--radius); white-space: nowrap; font-weight: 500; }
+
+  .tool-review { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; }
+  .tool-review-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .tool-review-name { font-size: 14px; font-weight: 500; margin: 0; }
+  .tool-review-body { font-size: 13px; color: var(--text-secondary); margin: 0; }
+  .tool-review-sources { font-size: 11px; color: var(--text-muted); margin: 6px 0 0; }
+  .tool-review-sources a { color: var(--accent); text-decoration: none; }
+  .tool-review-sources a:hover { text-decoration: underline; }
+
+  .roadmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 0.5rem; }
+  .phase { background: var(--surface-alt); border-radius: var(--radius); padding: 14px; }
+  .plabel { font-size: 11px; color: var(--text-muted); margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500; }
+  .phase h4 { font-size: 14px; font-weight: 500; margin: 0 0 8px; }
+  .phase ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--text-secondary); }
+  .phase li { margin-bottom: 4px; }
+
+  .scope-banner { background: var(--accent-bg); border-radius: var(--radius); padding: 14px 16px; margin: 1rem 0; font-size: 13px; color: var(--accent-text); line-height: 1.5; }
+  .scope-banner strong { font-weight: 500; }
+
+  .disclaimer { font-size: 12px; color: var(--text-muted); margin-top: 1.5rem; padding-top: 1rem; border-top: 0.5px solid var(--border); line-height: 1.5; }
+  .disclaimer strong { color: var(--text-secondary); font-weight: 500; }
+
+  .empty-tools { text-align: center; color: var(--text-muted); font-size: 13px; padding: 1rem; font-style: italic; }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div id="stepper" class="stepper hidden"></div>
+  <div id="stage-intro"></div>
+  <div id="stage-profile" class="hidden"></div>
+  <div id="stage-tools" class="hidden"></div>
+  <div id="stage-depth" class="hidden"></div>
+  <div id="stage-quiz" class="hidden"></div>
+  <div id="stage-report" class="hidden"></div>
+</div>
+
+<script>
+// ============================================================================
+// PURE LOGIC LAYER: Framework definitions and data
+// Kept as pure data structures for future testability (Phase B: extract to modules)
+// ============================================================================
+
+var FRAMEWORK = {
+  functions: {
+    govern:  { name: 'Govern',  desc: 'Policies, roles, accountability' },
+    map:     { name: 'Map',     desc: 'Context, use cases, risks identified' },
+    measure: { name: 'Measure', desc: 'Testing, monitoring, metrics' },
+    manage:  { name: 'Manage',  desc: 'Response, mitigation, incident handling' }
+  }
+};
+
+// Industry list. Not all industries get overlays. Those that don't get honest scoping banner.
+var INDUSTRIES = [
+  { id: 'nonprofit-social', label: 'Nonprofit / Social services' },
+  { id: 'education', label: 'Education' },
+  { id: 'healthcare', label: 'Healthcare / Life sciences' },
+  { id: 'financial', label: 'Financial services' },
+  { id: 'technology', label: 'Technology / Software' },
+  { id: 'retail', label: 'Retail / E-commerce' },
+  { id: 'manufacturing', label: 'Manufacturing / Industrial' },
+  { id: 'professional', label: 'Professional services / Consulting' },
+  { id: 'media', label: 'Media / Creative / Marketing' },
+  { id: 'government', label: 'Government / Public sector' },
+  { id: 'hospitality', label: 'Hospitality / Food service' },
+  { id: 'other', label: 'Other' }
+];
+
+// Base NIST questions (from v1, unchanged)
+var BASE_QUESTIONS = [
+  { id: 'g1', fn: 'govern', module: 'base', depths: ['quick','standard','comprehensive'],
+    text: 'Does your business have a written policy on how employees can use AI tools?',
+    hint: 'Includes ChatGPT, Copilot, Gemini, or any AI feature inside existing software.',
+    options: [
+      { v: 0, label: 'No policy exists' },
+      { v: 1, label: 'Informal guidance only' },
+      { v: 2, label: 'Written policy, not consistently followed' },
+      { v: 3, label: 'Written policy, reviewed and enforced' }
+    ]},
+  { id: 'g2', fn: 'govern', module: 'base', depths: ['quick','standard','comprehensive'],
+    text: 'Who is accountable when an AI tool causes a problem?',
+    hint: 'Wrong output sent to a customer, sensitive data exposed to a model, and so on.',
+    options: [
+      { v: 0, label: 'No one has been named' },
+      { v: 1, label: 'Unclear, depends on the situation' },
+      { v: 2, label: 'A specific person, but not documented' },
+      { v: 3, label: 'A named owner with documented responsibility' }
+    ]},
+  { id: 'g3', fn: 'govern', module: 'base', depths: ['standard','comprehensive'],
+    text: 'Do you have an approval process before adopting new AI tools?',
+    options: [
+      { v: 0, label: 'No, teams adopt tools freely' },
+      { v: 1, label: 'Ad hoc, sometimes reviewed' },
+      { v: 2, label: 'Yes, informal review' },
+      { v: 3, label: 'Formal review with approval criteria' }
+    ]},
+  { id: 'g4', fn: 'govern', module: 'base', depths: ['comprehensive'],
+    text: 'Do you train employees on responsible AI use?',
+    options: [
+      { v: 0, label: 'No training' },
+      { v: 1, label: 'One-time onboarding mention' },
+      { v: 2, label: 'Occasional refreshers' },
+      { v: 3, label: 'Structured, role-specific, updated regularly' }
+    ]},
+  { id: 'g5', fn: 'govern', module: 'base', depths: ['comprehensive'],
+    text: 'Are AI risks discussed at leadership or board level?',
+    options: [
+      { v: 0, label: 'Never' },
+      { v: 1, label: 'Only after incidents' },
+      { v: 2, label: 'Occasionally as part of tech updates' },
+      { v: 3, label: 'Regularly, with dedicated agenda time' }
+    ]},
+  { id: 'm1', fn: 'map', module: 'base', depths: ['quick','standard','comprehensive'],
+    text: 'Do you know which AI tools your team is actually using?',
+    hint: 'Includes tools built into products you already pay for.',
+    options: [
+      { v: 0, label: 'No visibility' },
+      { v: 1, label: 'A rough idea, not documented' },
+      { v: 2, label: 'Documented list, updated occasionally' },
+      { v: 3, label: 'Current inventory reviewed quarterly' }
+    ]},
+  { id: 'm2', fn: 'map', module: 'base', depths: ['quick','standard','comprehensive'],
+    text: 'For each AI use case, have you identified who could be harmed by a mistake?',
+    options: [
+      { v: 0, label: 'Not considered' },
+      { v: 1, label: 'Considered for one or two visible cases' },
+      { v: 2, label: 'Considered for most cases' },
+      { v: 3, label: 'Systematic impact analysis per use case' }
+    ]},
+  { id: 'm3', fn: 'map', module: 'base', depths: ['standard','comprehensive'],
+    text: 'Do you classify AI use cases by risk level?',
+    hint: 'Example: low (drafting), medium (customer response), high (hiring, credit, medical).',
+    options: [
+      { v: 0, label: 'No classification' },
+      { v: 1, label: 'Informal, case by case' },
+      { v: 2, label: 'Simple tiers used sometimes' },
+      { v: 3, label: 'Documented tiers applied to every new use case' }
+    ]},
+  { id: 'm4', fn: 'map', module: 'base', depths: ['comprehensive'],
+    text: 'Do you know what data your AI tools can access?',
+    options: [
+      { v: 0, label: 'No, and no easy way to find out' },
+      { v: 1, label: 'Only for the biggest tools' },
+      { v: 2, label: 'Mostly known, some gaps' },
+      { v: 3, label: 'Fully mapped, reviewed regularly' }
+    ]},
+  { id: 'm5', fn: 'map', module: 'base', depths: ['comprehensive'],
+    text: 'Do you evaluate third-party AI vendors before onboarding them?',
+    options: [
+      { v: 0, label: 'No vendor review' },
+      { v: 1, label: 'Informal check of the website' },
+      { v: 2, label: 'Basic security or privacy questionnaire' },
+      { v: 3, label: 'Structured review including AI-specific risks' }
+    ]},
+  { id: 'me1', fn: 'measure', module: 'base', depths: ['quick','standard','comprehensive'],
+    text: 'How do you check whether AI output is accurate or reliable?',
+    options: [
+      { v: 0, label: 'We do not check' },
+      { v: 1, label: 'Users spot-check when they notice something odd' },
+      { v: 2, label: 'Sampling reviews on high-stakes outputs' },
+      { v: 3, label: 'Structured review with documented metrics' }
+    ]},
+  { id: 'me2', fn: 'measure', module: 'base', depths: ['quick','standard','comprehensive'],
+    text: 'Do you track incidents related to AI use?',
+    hint: 'Wrong outputs sent externally, prompt leakage, biased results, and so on.',
+    options: [
+      { v: 0, label: 'No tracking' },
+      { v: 1, label: 'Only major incidents get discussed' },
+      { v: 2, label: 'Informal log kept' },
+      { v: 3, label: 'Formal incident register with review cadence' }
+    ]},
+  { id: 'me3', fn: 'measure', module: 'base', depths: ['standard','comprehensive'],
+    text: 'Do you monitor for bias in AI outputs that affect people?',
+    hint: 'Especially in hiring, customer service, pricing, or eligibility decisions.',
+    options: [
+      { v: 0, label: 'Not monitored' },
+      { v: 1, label: 'Considered, no active checks' },
+      { v: 2, label: 'Periodic manual review' },
+      { v: 3, label: 'Regular structured testing' }
+    ]},
+  { id: 'me4', fn: 'measure', module: 'base', depths: ['comprehensive'],
+    text: 'Do you keep records of AI decisions that affect customers or employees?',
+    options: [
+      { v: 0, label: 'No records' },
+      { v: 1, label: 'Kept only when someone complains' },
+      { v: 2, label: 'Some records, inconsistent' },
+      { v: 3, label: 'Systematic logging with retention policy' }
+    ]},
+  { id: 'me5', fn: 'measure', module: 'base', depths: ['comprehensive'],
+    text: 'How often do you re-evaluate the AI tools you use?',
+    options: [
+      { v: 0, label: 'Never after initial adoption' },
+      { v: 1, label: 'When something goes wrong' },
+      { v: 2, label: 'Annually' },
+      { v: 3, label: 'On a defined cadence with criteria' }
+    ]},
+  { id: 'ma1', fn: 'manage', module: 'base', depths: ['quick','standard','comprehensive'],
+    text: 'If an AI tool produced a harmful output right now, what happens next?',
+    options: [
+      { v: 0, label: 'Nothing formal, depends who notices' },
+      { v: 1, label: 'Someone would raise it informally' },
+      { v: 2, label: 'Escalation path exists but is untested' },
+      { v: 3, label: 'Documented response plan, tested at least once' }
+    ]},
+  { id: 'ma2', fn: 'manage', module: 'base', depths: ['quick','standard','comprehensive'],
+    text: 'Can you turn off or roll back an AI tool quickly if needed?',
+    options: [
+      { v: 0, label: 'No, would take days or longer' },
+      { v: 1, label: 'Yes, but painful and slow' },
+      { v: 2, label: 'Yes, within a few hours' },
+      { v: 3, label: 'Yes, quickly and with a documented process' }
+    ]},
+  { id: 'ma3', fn: 'manage', module: 'base', depths: ['standard','comprehensive'],
+    text: 'Do customers or employees know when they are interacting with AI?',
+    options: [
+      { v: 0, label: 'Never disclosed' },
+      { v: 1, label: 'Sometimes, inconsistently' },
+      { v: 2, label: 'Disclosed in most customer-facing cases' },
+      { v: 3, label: 'Disclosed by default, per policy' }
+    ]},
+  { id: 'ma4', fn: 'manage', module: 'base', depths: ['comprehensive'],
+    text: 'Do you have a way for people to challenge or appeal an AI-driven decision?',
+    options: [
+      { v: 0, label: 'No mechanism' },
+      { v: 1, label: 'General customer support only' },
+      { v: 2, label: 'Informal path, not published' },
+      { v: 3, label: 'Documented appeal process' }
+    ]},
+  { id: 'ma5', fn: 'manage', module: 'base', depths: ['comprehensive'],
+    text: 'Do you review your AI risk posture after a significant change?',
+    hint: 'New tool, new use case, new regulation, or major incident.',
+    options: [
+      { v: 0, label: 'No reviews triggered' },
+      { v: 1, label: 'Only after incidents' },
+      { v: 2, label: 'Sometimes for major changes' },
+      { v: 3, label: 'Standard practice for every change' }
+    ]}
+];
+
+// Nonprofit module: independent from youth-serving. Applies when orgType = 'nonprofit'.
+// Evidence base: BGCAZ engagement (Thunderbird Corporate Partners, Spring 2026).
+var NONPROFIT_QUESTIONS = [
+  { id: 'np1', fn: 'govern', module: 'nonprofit', depths: ['quick','standard','comprehensive'],
+    text: 'Are you using free personal-account AI tools for organizational work?',
+    hint: 'Common for cost-constrained nonprofits, but creates data risk without enterprise controls.',
+    options: [
+      { v: 0, label: 'Yes, extensively across staff' },
+      { v: 1, label: 'Yes, informally by some staff' },
+      { v: 2, label: 'Mostly enterprise, some personal accounts remain' },
+      { v: 3, label: 'Fully on enterprise or organizational accounts' }
+    ]},
+  { id: 'np2', fn: 'govern', module: 'nonprofit', depths: ['standard','comprehensive'],
+    text: 'Has your board been briefed on AI adoption and risk?',
+    hint: 'Board oversight is a specific governance obligation for 501(c)(3) organizations.',
+    options: [
+      { v: 0, label: 'No board discussion has happened' },
+      { v: 1, label: 'Mentioned briefly, no structured discussion' },
+      { v: 2, label: 'Discussed once, no ongoing agenda item' },
+      { v: 3, label: 'Structured briefing with ongoing board oversight' }
+    ]},
+  { id: 'np3', fn: 'map', module: 'nonprofit', depths: ['standard','comprehensive'],
+    text: 'Do you know whether donor data has been entered into any AI tool?',
+    hint: 'Includes names combined with giving amounts, donor communications, or Raiser\'s Edge / Salesforce exports.',
+    options: [
+      { v: 0, label: 'No idea, no controls' },
+      { v: 1, label: 'Suspect yes, unclear scope' },
+      { v: 2, label: 'Known limited use with anonymization' },
+      { v: 3, label: 'Explicit policy prohibits, verified compliance' }
+    ]},
+  { id: 'np4', fn: 'govern', module: 'nonprofit', depths: ['comprehensive'],
+    text: 'Have you applied for nonprofit-discounted enterprise AI accounts?',
+    hint: 'Google Workspace for Nonprofits, Canva for Nonprofits, ChatGPT Business nonprofit rate, etc. Often free or steeply discounted.',
+    options: [
+      { v: 0, label: 'Not aware these exist' },
+      { v: 1, label: 'Aware, not applied' },
+      { v: 2, label: 'Applied for one or two' },
+      { v: 3, label: 'Actively using multiple nonprofit-tier enterprise accounts' }
+    ]},
+  { id: 'np5', fn: 'measure', module: 'nonprofit', depths: ['comprehensive'],
+    text: 'If your CRM (Salesforce, Raiser\'s Edge, Bloomerang, etc.) has AI features, do you know whether they are active?',
+    hint: 'Many nonprofit CRMs now include AI features that may or may not be enabled by default.',
+    options: [
+      { v: 0, label: 'Not sure what AI features exist' },
+      { v: 1, label: 'Aware some exist, unclear which are on' },
+      { v: 2, label: 'Reviewed once, no ongoing check' },
+      { v: 3, label: 'Formal license audit completed, features intentionally configured' }
+    ]}
+];
+
+// Youth-serving module: independent from nonprofit. Applies when servesYouth = true.
+// Evidence base: BGCAZ engagement (COPPA analysis), Common Sense Media 2026 assessments.
+var YOUTH_QUESTIONS = [
+  { id: 'y1', fn: 'govern', module: 'youth', depths: ['quick','standard','comprehensive'],
+    text: 'Do any AI tools your team uses process data about individuals under 13?',
+    hint: 'COPPA applies to children under 13. This includes names, program records, incident reports, photos.',
+    options: [
+      { v: 0, label: 'Yes, on personal-account AI tools without controls' },
+      { v: 1, label: 'Yes, unclear which controls are in place' },
+      { v: 2, label: 'Yes, only on tools with compliant Data Processing Agreements' },
+      { v: 3, label: 'No youth data enters any AI tool' }
+    ]},
+  { id: 'y2', fn: 'govern', module: 'youth', depths: ['quick','standard','comprehensive'],
+    text: 'Do you have a written policy specifically about AI use in youth programming?',
+    hint: 'Separate from general staff AI policy. Covers what AI can and cannot be used for around minors.',
+    options: [
+      { v: 0, label: 'No youth-specific AI policy exists' },
+      { v: 1, label: 'Youth mentioned in general AI policy only' },
+      { v: 2, label: 'Draft youth AI policy exists, not adopted' },
+      { v: 3, label: 'Adopted, HR/Legal-reviewed youth AI policy' }
+    ]},
+  { id: 'y3', fn: 'govern', module: 'youth', depths: ['standard','comprehensive'],
+    text: 'Do you have parental consent workflows for AI tools that interact with youth?',
+    options: [
+      { v: 0, label: 'No consent process' },
+      { v: 1, label: 'General consent covers AI implicitly' },
+      { v: 2, label: 'Specific consent for some AI use cases' },
+      { v: 3, label: 'Explicit, informed, specific parental consent per AI use case' }
+    ]},
+  { id: 'y4', fn: 'manage', module: 'youth', depths: ['standard','comprehensive'],
+    text: 'Do staff know what to do if AI surfaces content that suggests youth safety concerns?',
+    hint: 'Examples: signs of abuse, self-harm, or crisis surfaced through AI-analyzed communications or content.',
+    options: [
+      { v: 0, label: 'No protocol exists' },
+      { v: 1, label: 'General mandated reporter training only' },
+      { v: 2, label: 'AI-specific protocol drafted but not trained on' },
+      { v: 3, label: 'AI-specific crisis protocol, staff trained' }
+    ]},
+  { id: 'y5', fn: 'map', module: 'youth', depths: ['comprehensive'],
+    text: 'For AI tools accessible to youth on your premises, have you reviewed age-appropriateness?',
+    hint: 'Common Sense Media publishes AI tool risk assessments for teen users. Some tools have documented safety failures with minors.',
+    options: [
+      { v: 0, label: 'No review conducted' },
+      { v: 1, label: 'Informal awareness only' },
+      { v: 2, label: 'Reviewed once, no update process' },
+      { v: 3, label: 'Structured review with periodic re-assessment' }
+    ]},
+  { id: 'y6', fn: 'measure', module: 'youth', depths: ['comprehensive'],
+    text: 'If AI is used in any youth-facing capacity, is that use tracked and reviewable?',
+    options: [
+      { v: 0, label: 'Not tracked' },
+      { v: 1, label: 'Ad hoc awareness' },
+      { v: 2, label: 'Logged, no formal review' },
+      { v: 3, label: 'Logged with scheduled review by designated staff' }
+    ]}
+];
+
+// Recommendation titles map (base + modules)
+var REC_TITLES = {
+  g1: 'Write a basic AI use policy',
+  g2: 'Name an accountable owner for AI risk',
+  g3: 'Add an AI tool approval step',
+  g4: 'Train employees on responsible AI use',
+  g5: 'Put AI risk on the leadership agenda',
+  m1: 'Inventory the AI tools in use',
+  m2: 'Identify who could be harmed per use case',
+  m3: 'Classify AI use cases by risk tier',
+  m4: 'Map what data each AI tool can access',
+  m5: 'Add AI-specific questions to vendor reviews',
+  me1: 'Introduce output quality checks',
+  me2: 'Start an AI incident log',
+  me3: 'Add bias checks for high-impact outputs',
+  me4: 'Log AI decisions that affect people',
+  me5: 'Schedule regular tool re-evaluation',
+  ma1: 'Document an AI incident response plan',
+  ma2: 'Ensure you can shut down or roll back AI tools',
+  ma3: 'Disclose when customers are interacting with AI',
+  ma4: 'Create an appeal path for AI decisions',
+  ma5: 'Trigger reviews after significant changes',
+  // Nonprofit
+  np1: 'Transition off personal-account AI tools',
+  np2: 'Brief the board on AI adoption and risk',
+  np3: 'Establish donor data controls for AI use',
+  np4: 'Apply for nonprofit-discounted enterprise AI accounts',
+  np5: 'Audit your CRM for AI features and license status',
+  // Youth
+  y1: 'Establish COPPA-compliant AI data handling',
+  y2: 'Adopt a youth-specific AI policy',
+  y3: 'Build parental consent workflows for AI',
+  y4: 'Create an AI-surfaced youth safety protocol',
+  y5: 'Review AI tool age-appropriateness',
+  y6: 'Track and review youth-facing AI use'
+};
+
+// Module-specific recommendation bodies (base uses generic template; modules get specifics)
+var REC_BODIES = {
+  np1: 'Personal-account AI tools cannot be audited, revoked, or monitored by your organization. Nonprofit-tier enterprise accounts from Google (free for up to 2,000 users), Canva (free for up to 50 users), or Microsoft (free Copilot Chat with existing M365) close this gap at little to no cost. This is often the highest-ROI single move a nonprofit can make.',
+  np2: 'Board oversight is a governance obligation for 501(c)(3) organizations, and AI now sits alongside cybersecurity and financial risk as a topic requiring board-level attention. A single structured briefing covering current AI use, risks, and controls establishes the oversight baseline auditors and funders increasingly expect.',
+  np3: 'Donor data combined with giving amounts is one of the most sensitive data categories a nonprofit holds. Written policy prohibiting entry of donor data into personal-account AI tools, backed by anonymization requirements for any AI-assisted donor communication, is essential.',
+  np4: 'Nonprofit-discounted enterprise AI accounts are underused. Google Workspace for Nonprofits with Gemini is $0 for up to 2,000 users. Canva for Nonprofits is $0 for up to 50 users. ChatGPT Business is available at $8/user/month (68% nonprofit discount). Applications typically process in 5-7 business days.',
+  np5: 'CRMs like Salesforce (Einstein), Bloomerang, and Raiser\'s Edge now include AI features that may be enabled by default or available as add-ons. A license audit determines what you already have access to and prevents duplicate spend on external AI tools.',
+  y1: 'COPPA applies to any AI processing of data about children under 13. Personal-account AI tools without a compliant Data Processing Agreement create federal regulatory exposure. Either restrict youth data from AI tools entirely, or migrate to enterprise AI accounts with DPAs in place before any youth data touches AI.',
+  y2: 'General staff AI policy is insufficient for youth-serving contexts. A youth-specific AI policy covers parental consent, approved tools, crisis protocols, and staff accountability for AI use around minors. Requires HR/Legal review and leadership values alignment before drafting.',
+  y3: 'Existing general parental consent does not cover AI use cases specifically. Explicit, informed, specific parental consent per AI use case is the emerging standard, and any AI tool that processes youth data must be named in that consent.',
+  y4: 'Mandated reporter obligations extend to signs of harm surfaced through AI. Staff need a specific protocol for what to do if an AI tool flags content suggesting abuse, self-harm, or crisis, including who to escalate to and how to preserve the AI-generated evidence.',
+  y5: 'Common Sense Media and other independent bodies publish AI risk assessments specifically for teen users. Several mainstream AI tools have documented safety failures with minors. Any AI tool accessible to youth on your premises should be reviewed against these assessments before use.',
+  y6: 'AI use in youth-facing capacities needs logging beyond general AI tool tracking, because the review standard is higher. A designated staff role (AI Safety Lead, Youth Services Director, etc.) should periodically review what AI was used with youth, for what purpose, and whether the use aligned with policy.'
+};
+
+// AI Tool Master List
+// Classifications are criteria-based, not opinion. Each tool has:
+//   - profile filters (industries where it's commonly used)
+//   - classification (high-risk / caution / lower-risk)
+//   - reasoning (why classified this way, criteria-based)
+//   - sources (primary sources supporting classification)
+//   - lastReviewed (when this classification was last verified)
+var TOOL_MASTER_LIST = [
+  // General-purpose LLMs (common across all industries)
+  { id: 't-chatgpt', name: 'ChatGPT', category: 'General LLM', industries: ['all'],
+    classification: 'caution', 
+    reasoning: 'On free personal accounts, conversations may be used to train models by default. Requires user to disable "Improve the model for everyone" in Data Controls. Enterprise tier (ChatGPT Business/Enterprise) has full data controls.',
+    sources: ['OpenAI Data Controls documentation'], lastReviewed: '2026-04' },
+  { id: 't-claude', name: 'Claude', category: 'General LLM', industries: ['all'],
+    classification: 'caution',
+    reasoning: 'On free personal accounts, conversations may be used to improve Claude by default. Requires user to disable "Improve Claude for everyone" in Privacy settings. Team/Enterprise tiers have full data controls.',
+    sources: ['Anthropic Privacy documentation'], lastReviewed: '2026-04' },
+  { id: 't-copilot', name: 'Microsoft Copilot', category: 'General LLM', industries: ['all'],
+    classification: 'lower-risk',
+    reasoning: 'When signed in with a personal Microsoft account, chat data is not used to train models by default. Enterprise Copilot has additional controls.',
+    sources: ['Microsoft Privacy Statement'], lastReviewed: '2026-04' },
+  { id: 't-gemini', name: 'Google Gemini', category: 'General LLM', industries: ['all'],
+    classification: 'caution',
+    reasoning: 'On personal Google accounts, Gemini Apps Activity is saved by default and may be reviewed by Google. Requires user to disable via account settings. Workspace tiers have organizational controls.',
+    sources: ['Google Account privacy settings'], lastReviewed: '2026-04' },
+  { id: 't-grok', name: 'Grok / @grok on X', category: 'General LLM', industries: ['all'],
+    classification: 'high-risk',
+    reasoning: 'Multiple documented incidents including generation of CSAM images (December 2025), antisemitic content (July 2025), and injection of extremist narratives into unrelated responses (May 2025). Hundreds of thousands of private conversations found publicly indexed (August 2025). Active regulatory investigations in multiple jurisdictions.',
+    sources: ['Common Sense Media 2026 risk assessment', 'Public reporting (multiple outlets)'], lastReviewed: '2026-04' },
+  { id: 't-meta-ai', name: 'Meta AI (WhatsApp, Instagram, Facebook)', category: 'General LLM', industries: ['all'],
+    classification: 'high-risk',
+    reasoning: 'No organizational account, admin interface, or governance layer exists. Data is subject to Meta\'s advertising-linked ecosystem by default. No SSO, audit logging, or compliance pathway.',
+    sources: ['Meta privacy documentation'], lastReviewed: '2026-04' },
+  { id: 't-character-ai', name: 'Character.AI / Replika', category: 'AI Companion', industries: ['all'],
+    classification: 'high-risk',
+    reasoning: 'Multiple lawsuits and legislative scrutiny related to harm to minors, including a high-profile wrongful death case. No admin controls or organizational governance capabilities. Optimized for engagement, not accuracy or professional use.',
+    sources: ['Public litigation records'], lastReviewed: '2026-04' },
+
+  // Transcription and meeting tools
+  { id: 't-otter', name: 'Otter.ai', category: 'Transcription', industries: ['all'],
+    classification: 'high-risk',
+    reasoning: 'Active class-action lawsuit (In re Otter.AI Privacy Litigation) over data practices including potential biometric data collection via voiceprints. Transcripts stored indefinitely on Otter\'s cloud servers with no organizational retention controls.',
+    sources: ['In re Otter.AI Privacy Litigation'], lastReviewed: '2026-04' },
+  { id: 't-wave', name: 'Wave AI', category: 'Transcription', industries: ['all'],
+    classification: 'high-risk',
+    reasoning: 'Shares audio and transcript data with two separate third-party AI providers (AssemblyAI for transcription, OpenAI for summarization). Meeting content leaves Wave\'s systems entirely. No organizational access controls.',
+    sources: ['Wave AI data processing documentation'], lastReviewed: '2026-04' },
+  { id: 't-granola', name: 'Granola', category: 'Transcription', industries: ['all'],
+    classification: 'caution',
+    reasoning: 'Despite marketing as "private by default," stores notes on AWS cloud servers. Shareable links enabled by default. AI model training opted in by default on free accounts. Requires multiple settings changes before organizational use.',
+    sources: ['April 2026 investigative reporting'], lastReviewed: '2026-04' },
+  { id: 't-zoom-ai', name: 'Zoom AI Companion', category: 'Transcription', industries: ['all'],
+    classification: 'caution',
+    reasoning: 'Zoom does not use audio, video, or chat content to train its AI models by default per current documentation. Enterprise controls available. Should not be enabled on calls containing sensitive information without review.',
+    sources: ['Zoom AI Companion documentation'], lastReviewed: '2026-04' },
+
+  // Design and creative
+  { id: 't-canva', name: 'Canva (with AI features)', category: 'Design', industries: ['all', 'media', 'nonprofit-social', 'education'],
+    classification: 'lower-risk',
+    reasoning: 'SOC 2 certified; content encrypted in transit and at rest; does not sell user data. AI image generation should be used with caution in contexts involving minors.',
+    sources: ['Canva Trust Center'], lastReviewed: '2026-04' },
+  { id: 't-midjourney', name: 'Midjourney', category: 'Image generation', industries: ['media', 'technology'],
+    classification: 'caution',
+    reasoning: 'Discord-based tool with limited organizational controls. Content may be visible to other users by default on lower tiers. Standard/Pro tiers offer private generation.',
+    sources: ['Midjourney terms of service'], lastReviewed: '2026-04' },
+  { id: 't-dalle', name: 'DALL-E (via ChatGPT)', category: 'Image generation', industries: ['media', 'technology', 'all'],
+    classification: 'caution',
+    reasoning: 'Inherits ChatGPT data practices. Enterprise tier controls apply.',
+    sources: ['OpenAI documentation'], lastReviewed: '2026-04' },
+
+  // Music/audio
+  { id: 't-suno', name: 'Suno', category: 'Music generation', industries: ['media'],
+    classification: 'caution',
+    reasoning: 'Consumer music generation platform. Active copyright litigation (Suno v. RIAA/major labels). Commercial use rights unclear pending litigation outcomes.',
+    sources: ['Suno vs. RIAA litigation'], lastReviewed: '2026-04' },
+  { id: 't-elevenlabs', name: 'ElevenLabs', category: 'Voice generation', industries: ['media', 'technology'],
+    classification: 'caution',
+    reasoning: 'Voice cloning capability has documented misuse for deepfakes and fraud. Enterprise controls available. Should not be used with any voice sample without documented consent.',
+    sources: ['ElevenLabs safety documentation'], lastReviewed: '2026-04' },
+
+  // Writing and productivity
+  { id: 't-grammarly', name: 'Grammarly', category: 'Writing assistant', industries: ['all'],
+    classification: 'lower-risk',
+    reasoning: 'Free tier is SOC 2 Type II certified; does not sell user data. Standard data-input guidelines apply for sensitive content.',
+    sources: ['Grammarly Trust Center'], lastReviewed: '2026-04' },
+  { id: 't-notion-ai', name: 'Notion AI', category: 'Productivity', industries: ['technology', 'professional', 'media'],
+    classification: 'lower-risk',
+    reasoning: 'Notion does not use customer data to train AI models. Enterprise controls available.',
+    sources: ['Notion AI documentation'], lastReviewed: '2026-04' },
+  { id: 't-jasper', name: 'Jasper', category: 'Marketing content', industries: ['media', 'retail'],
+    classification: 'lower-risk',
+    reasoning: 'B2B marketing platform with enterprise-grade data controls. Does not train on customer data.',
+    sources: ['Jasper Security documentation'], lastReviewed: '2026-04' },
+
+  // Presentations
+  { id: 't-gamma', name: 'Gamma', category: 'Presentations', industries: ['all', 'professional'],
+    classification: 'caution',
+    reasoning: 'Presentations cloud-hosted and shareable via link by default. Free-tier terms do not explicitly confirm whether user content is used for training. Requires review of sharing settings per deck.',
+    sources: ['Gamma privacy documentation'], lastReviewed: '2026-04' },
+  { id: 't-tome', name: 'Tome', category: 'Presentations', industries: ['professional', 'media'],
+    classification: 'caution',
+    reasoning: 'Similar cloud-first architecture to Gamma. Sharing defaults require review.',
+    sources: ['Tome documentation'], lastReviewed: '2026-04' },
+
+  // Vertical-specific: Financial
+  { id: 't-alphasense', name: 'AlphaSense', category: 'Market intelligence', industries: ['financial'],
+    classification: 'lower-risk',
+    reasoning: 'Enterprise financial research platform with SOC 2 compliance and financial services security controls.',
+    sources: ['AlphaSense Trust Center'], lastReviewed: '2026-04' },
+  { id: 't-hebbia', name: 'Hebbia', category: 'Document analysis', industries: ['financial', 'professional'],
+    classification: 'lower-risk',
+    reasoning: 'Enterprise-focused document analysis platform with financial services compliance certifications.',
+    sources: ['Hebbia Security documentation'], lastReviewed: '2026-04' },
+
+  // Vertical-specific: Healthcare
+  { id: 't-abridge', name: 'Abridge', category: 'Clinical documentation', industries: ['healthcare'],
+    classification: 'lower-risk',
+    reasoning: 'HIPAA-compliant clinical documentation platform with BAA available. Enterprise-only deployment.',
+    sources: ['Abridge HIPAA documentation'], lastReviewed: '2026-04' },
+  { id: 't-nabla', name: 'Nabla', category: 'Clinical documentation', industries: ['healthcare'],
+    classification: 'lower-risk',
+    reasoning: 'HIPAA-compliant medical scribe. BAA available. Enterprise-only deployment.',
+    sources: ['Nabla documentation'], lastReviewed: '2026-04' },
+
+  // Vertical-specific: Sales/CRM
+  { id: 't-salesforce-einstein', name: 'Salesforce Einstein', category: 'CRM AI', industries: ['all', 'nonprofit-social', 'financial', 'retail'],
+    classification: 'lower-risk',
+    reasoning: 'Enterprise CRM AI operating within Salesforce\'s trust and compliance framework. Data does not leave the Salesforce environment for AI processing.',
+    sources: ['Salesforce Trust'], lastReviewed: '2026-04' },
+  { id: 't-hubspot-ai', name: 'HubSpot AI', category: 'CRM AI', industries: ['all', 'technology', 'professional'],
+    classification: 'lower-risk',
+    reasoning: 'Enterprise CRM AI with SOC 2 and GDPR compliance. Data handled within HubSpot\'s existing security framework.',
+    sources: ['HubSpot Trust Center'], lastReviewed: '2026-04' },
+
+  // Coding
+  { id: 't-github-copilot', name: 'GitHub Copilot', category: 'Coding assistant', industries: ['technology'],
+    classification: 'lower-risk',
+    reasoning: 'Enterprise tier does not use code for training. Individual tier requires opt-out. IP indemnification available on Business/Enterprise tiers.',
+    sources: ['GitHub Copilot documentation'], lastReviewed: '2026-04' },
+  { id: 't-cursor', name: 'Cursor', category: 'Coding assistant', industries: ['technology'],
+    classification: 'caution',
+    reasoning: 'AI-powered code editor. Free tier may use code for training; privacy mode available in paid tiers. Requires review before use with proprietary or sensitive code.',
+    sources: ['Cursor privacy documentation'], lastReviewed: '2026-04' },
+
+  // Education-specific
+  { id: 't-khanmigo', name: 'Khanmigo', category: 'Education AI', industries: ['education'],
+    classification: 'lower-risk',
+    reasoning: 'Purpose-built for education with FERPA compliance considerations built in. Institutional deployment available.',
+    sources: ['Khan Academy documentation'], lastReviewed: '2026-04' },
+  { id: 't-magic-school', name: 'MagicSchool AI', category: 'Education AI', industries: ['education'],
+    classification: 'lower-risk',
+    reasoning: 'Teacher-focused platform with education-specific privacy controls and FERPA considerations.',
+    sources: ['MagicSchool documentation'], lastReviewed: '2026-04' },
+
+  // Government
+  { id: 't-govgpt', name: 'Government-authorized AI (GovGPT, agency-specific)', category: 'Government AI', industries: ['government'],
+    classification: 'lower-risk',
+    reasoning: 'FedRAMP-authorized AI platforms deployed within government trust boundaries.',
+    sources: ['FedRAMP marketplace'], lastReviewed: '2026-04' }
+];
+
+// ============================================================================
+// PURE LOGIC: Scoring, module selection, recommendation generation
+// These functions are the ones we'd unit test at 90%+ coverage in Phase B
+// ============================================================================
+
+function getApplicableModules(profile) {
+  var modules = ['base'];
+  if (profile.orgType === 'nonprofit') modules.push('nonprofit');
+  if (profile.servesYouth === true) modules.push('youth');
+  return modules;
+}
+
+function getQuestionsForAssessment(profile, depth) {
+  var modules = getApplicableModules(profile);
+  var pool = [];
+  if (modules.indexOf('base') !== -1) pool = pool.concat(BASE_QUESTIONS);
+  if (modules.indexOf('nonprofit') !== -1) pool = pool.concat(NONPROFIT_QUESTIONS);
+  if (modules.indexOf('youth') !== -1) pool = pool.concat(YOUTH_QUESTIONS);
+  return pool.filter(function(q) { return q.depths.indexOf(depth) !== -1; });
+}
+
+function computeScores(questions, answers) {
+  var fnScores = {
+    govern: { sum: 0, max: 0 },
+    map: { sum: 0, max: 0 },
+    measure: { sum: 0, max: 0 },
+    manage: { sum: 0, max: 0 }
+  };
+  questions.forEach(function(q) {
+    if (answers[q.id] !== undefined) {
+      fnScores[q.fn].sum += answers[q.id];
+      fnScores[q.fn].max += 3;
+    }
+  });
+  var totalSum = 0, totalMax = 0;
+  Object.keys(fnScores).forEach(function(k) {
+    totalSum += fnScores[k].sum;
+    totalMax += fnScores[k].max;
+  });
+  var overall = totalMax === 0 ? 0 : Math.round((totalSum / totalMax) * 100);
+  return { fnScores: fnScores, overall: overall, totalSum: totalSum, totalMax: totalMax };
+}
+
+function computeTier(overall) {
+  if (overall >= 70) return {
+    key: 'low', cssClass: 'tier-low', label: 'Lower risk',
+    desc: 'Your governance is meaningfully ahead of most SMBs. Focus on maintaining rigor and closing the last gaps before a formal audit or vendor review.'
+  };
+  if (overall >= 40) return {
+    key: 'medium', cssClass: 'tier-med', label: 'Moderate risk',
+    desc: 'Reasonable foundations, but real gaps exist. You are exposed if a high-impact incident happens or a customer asks for evidence of governance.'
+  };
+  return {
+    key: 'high', cssClass: 'tier-high', label: 'Higher risk',
+    desc: 'Governance is largely informal or absent. Prioritize the basics before adopting more AI tools or expanding sensitive use cases.'
+  };
+}
+
+function identifyGaps(questions, answers) {
+  var gaps = [];
+  questions.forEach(function(q) {
+    var v = answers[q.id];
+    if (v !== undefined && v <= 1) {
+      gaps.push({ fn: q.fn, module: q.module, q: q, v: v, priority: v === 0 ? 'high' : 'medium' });
+    }
+  });
+  return gaps;
+}
+
+function buildRecommendations(gaps) {
+  var seen = {};
+  var recs = [];
+  ['high','medium'].forEach(function(pri) {
+    gaps.filter(function(g) { return g.priority === pri; }).forEach(function(g) {
+      var key = g.q.id;
+      if (seen[key]) return;
+      seen[key] = true;
+      var body = REC_BODIES[g.q.id] || 
+        ((g.v === 0 ? 'No baseline in place today. ' : 'A partial baseline exists. ') +
+         'This gap sits in the ' + FRAMEWORK.functions[g.fn].name + ' function of the NIST AI RMF. Closing it is one of the highest-value moves you can make with limited time and budget, and it produces evidence you can point to if a customer, regulator, or insurer asks.');
+      recs.push({
+        priority: pri, fn: g.fn, module: g.q.module,
+        title: REC_TITLES[g.q.id] || 'Address this gap',
+        body: body
+      });
+    });
+  });
+  return recs;
+}
+
+function classifyToolsInUse(selectedToolIds, otherTools) {
+  var flagged = { 'high-risk': [], 'caution': [], 'lower-risk': [] };
+  selectedToolIds.forEach(function(id) {
+    var tool = TOOL_MASTER_LIST.find(function(t) { return t.id === id; });
+    if (tool) flagged[tool.classification].push(tool);
+  });
+  return { flagged: flagged, otherTools: otherTools };
+}
+
+function filterToolsForProfile(profile) {
+  return TOOL_MASTER_LIST.filter(function(tool) {
+    return tool.industries.indexOf('all') !== -1 ||
+           tool.industries.indexOf(profile.industry) !== -1;
+  });
+}
+
+function hasIndustryOverlay(profile) {
+  // v2: only nonprofit-youth-serving is fully validated as an overlay.
+  // Nonprofit and youth-serving are independent modules that always apply based on profile flags.
+  // No industry-specific overlays in v2 for other industries.
+  return false;
+}
+
+// ============================================================================
+// STATE
+// ============================================================================
+
+var state = {
+  profile: {
+    orgType: null,          // 'nonprofit' | 'for-profit'
+    servesYouth: null,      // true | false
+    industry: null,         // industry id
+    size: null,             // '1-10' | '11-50' | '51-200' | '201-1000' | '1000+'
+    region: null,           // 'us' | 'eu' | 'uk' | 'ca' | 'other'
+    regulated: [],          // array of 'pii' | 'phi' | 'financial' | 'eu-customers' | 'children-data'
+    customerType: null,     // 'b2b' | 'b2c' | 'gov' | 'internal'
+    aiMaturity: null        // 'exploring' | 'piloting' | 'deployed' | 'scaled'
+  },
+  toolsSelected: [],        // array of tool ids
+  otherTools: [],           // array of user-added tool names
+  depth: null,
+  questions: [],
+  answers: {},
+  idx: 0
+};
+
+// ============================================================================
+// RENDERING (DOM layer, kept separate from logic above)
+// ============================================================================
+
+function el(id) { return document.getElementById(id); }
+function hideAll() {
+  ['stage-intro','stage-profile','stage-tools','stage-depth','stage-quiz','stage-report'].forEach(function(s) {
+    el(s).classList.add('hidden');
+  });
+}
+function show(stageId) {
+  hideAll();
+  el(stageId).classList.remove('hidden');
+  window.scrollTo(0, 0);
+}
+
+function renderStepper(currentStep) {
+  var steps = [
+    { id: 'profile', label: 'Profile' },
+    { id: 'tools', label: 'Tools' },
+    { id: 'depth', label: 'Depth' },
+    { id: 'assess', label: 'Assessment' },
+    { id: 'report', label: 'Report' }
+  ];
+  var stepper = el('stepper');
+  var currentIdx = steps.findIndex(function(s) { return s.id === currentStep; });
+  stepper.classList.remove('hidden');
+  stepper.innerHTML = steps.map(function(s, i) {
+    var cls = 'step';
+    if (i < currentIdx) cls += ' complete';
+    if (i === currentIdx) cls += ' active';
+    return '<div class="' + cls + '"><span class="step-dot"></span>' + s.label + '</div>' +
+      (i < steps.length - 1 ? '<span class="step-sep">→</span>' : '');
+  }).join('');
+}
+
+function renderIntro() {
+  show('stage-intro');
+  el('stepper').classList.add('hidden');
+  el('stage-intro').innerHTML = '' +
+    '<div class="hero">' +
+      '<p class="kicker">AI governance readiness</p>' +
+      '<h1>How ready is your business for AI?</h1>' +
+      '<p class="lede">A NIST AI Risk Management Framework based assessment, built for small and medium businesses adopting AI tools. This version adds profile-tailored questions for nonprofits and youth-serving organizations.</p>' +
+    '</div>' +
+    '<div class="callout info">' +
+      '<strong>What you get:</strong> A structured 15-30 minute assessment across four NIST functions (Govern, Map, Measure, Manage), plus additional modules that apply if your organization is a nonprofit or serves people under 18. Report includes a risk tier, gap map, prioritized recommendations, and an objective classification of AI tools you already use.' +
+    '</div>' +
+    '<div class="row" style="margin-top: 1rem;"><button id="btn-start" class="primary">Start</button></div>';
+  el('btn-start').addEventListener('click', renderProfile);
+}
+
+function renderProfile() {
+  show('stage-profile');
+  renderStepper('profile');
+  var p = state.profile;
+  el('stage-profile').innerHTML = '' +
+    '<div class="hero">' +
+      '<p class="kicker">Step 1 of 4</p>' +
+      '<h1>Tell us about your organization</h1>' +
+      '<p class="lede">This tailors which questions apply and how recommendations are framed. All fields optional except organization type.</p>' +
+    '</div>' +
+
+    '<div class="profile-card">' +
+      '<div class="field-group">' +
+        '<label class="field-label">Organization type <span class="field-required">*</span></label>' +
+        '<div class="radio-row">' +
+          radioBtn('orgType', 'nonprofit', 'Nonprofit / 501(c)(3)', p.orgType === 'nonprofit') +
+          radioBtn('orgType', 'for-profit', 'For-profit', p.orgType === 'for-profit') +
+        '</div>' +
+      '</div>' +
+
+      '<div class="field-group">' +
+        '<label class="field-label">Does your organization serve people under 18? <span class="field-required">*</span></label>' +
+        '<p class="field-hint">Includes youth programs, K-12 education, pediatric services, family services.</p>' +
+        '<div class="radio-row">' +
+          radioBtn('servesYouth', 'true', 'Yes', p.servesYouth === true) +
+          radioBtn('servesYouth', 'false', 'No', p.servesYouth === false) +
+        '</div>' +
+      '</div>' +
+
+      '<div class="field-group">' +
+        '<label class="field-label">Industry</label>' +
+        '<select id="f-industry">' +
+          '<option value="">Select industry...</option>' +
+          INDUSTRIES.map(function(ind) {
+            return '<option value="' + ind.id + '"' + (p.industry === ind.id ? ' selected' : '') + '>' + ind.label + '</option>';
+          }).join('') +
+        '</select>' +
+      '</div>' +
+
+      '<div class="field-group">' +
+        '<label class="field-label">Organization size</label>' +
+        '<div class="radio-row">' +
+          radioBtn('size', '1-10', '1-10', p.size === '1-10') +
+          radioBtn('size', '11-50', '11-50', p.size === '11-50') +
+          radioBtn('size', '51-200', '51-200', p.size === '51-200') +
+          radioBtn('size', '201-1000', '201-1,000', p.size === '201-1000') +
+          radioBtn('size', '1000+', '1,000+', p.size === '1000+') +
+        '</div>' +
+      '</div>' +
+
+      '<div class="field-group">' +
+        '<label class="field-label">Primary region</label>' +
+        '<div class="radio-row">' +
+          radioBtn('region', 'us', 'United States', p.region === 'us') +
+          radioBtn('region', 'eu', 'European Union', p.region === 'eu') +
+          radioBtn('region', 'uk', 'United Kingdom', p.region === 'uk') +
+          radioBtn('region', 'ca', 'Canada', p.region === 'ca') +
+          radioBtn('region', 'other', 'Other', p.region === 'other') +
+        '</div>' +
+      '</div>' +
+
+      '<div class="field-group">' +
+        '<label class="field-label">Do you handle any of the following? (select all that apply)</label>' +
+        '<div class="checkbox-row">' +
+          checkBtn('regulated', 'pii', 'Personal identifiable info', p.regulated.indexOf('pii') !== -1) +
+          checkBtn('regulated', 'phi', 'Health data (PHI)', p.regulated.indexOf('phi') !== -1) +
+          checkBtn('regulated', 'financial', 'Financial data', p.regulated.indexOf('financial') !== -1) +
+          checkBtn('regulated', 'eu-customers', 'EU customers (GDPR)', p.regulated.indexOf('eu-customers') !== -1) +
+          checkBtn('regulated', 'children-data', 'Data about children', p.regulated.indexOf('children-data') !== -1) +
+        '</div>' +
+      '</div>' +
+
+      '<div class="field-group">' +
+        '<label class="field-label">Primary customer type</label>' +
+        '<div class="radio-row">' +
+          radioBtn('customerType', 'b2b', 'B2B', p.customerType === 'b2b') +
+          radioBtn('customerType', 'b2c', 'B2C', p.customerType === 'b2c') +
+          radioBtn('customerType', 'gov', 'Government', p.customerType === 'gov') +
+          radioBtn('customerType', 'internal', 'Internal only', p.customerType === 'internal') +
+        '</div>' +
+      '</div>' +
+
+      '<div class="field-group">' +
+        '<label class="field-label">Current AI maturity</label>' +
+        '<div class="radio-row">' +
+          radioBtn('aiMaturity', 'exploring', 'Just exploring', p.aiMaturity === 'exploring') +
+          radioBtn('aiMaturity', 'piloting', 'Piloting tools', p.aiMaturity === 'piloting') +
+          radioBtn('aiMaturity', 'deployed', 'Deployed in some functions', p.aiMaturity === 'deployed') +
+          radioBtn('aiMaturity', 'scaled', 'Scaled across the org', p.aiMaturity === 'scaled') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<p id="err-profile" class="err hidden">Please answer the two required questions to continue.</p>' +
+
+    '<div class="row" style="margin-top: 1rem;">' +
+      '<button id="btn-back-intro">Back</button>' +
+      '<div style="flex:1"></div>' +
+      '<button id="btn-next-profile" class="primary">Continue to tools</button>' +
+    '</div>';
+
+  attachRadioHandlers('orgType', function(v) { state.profile.orgType = v; });
+  attachRadioHandlers('servesYouth', function(v) { state.profile.servesYouth = (v === 'true'); });
+  attachRadioHandlers('size', function(v) { state.profile.size = v; });
+  attachRadioHandlers('region', function(v) { state.profile.region = v; });
+  attachRadioHandlers('customerType', function(v) { state.profile.customerType = v; });
+  attachRadioHandlers('aiMaturity', function(v) { state.profile.aiMaturity = v; });
+  attachCheckHandlers('regulated', state.profile.regulated);
+  el('f-industry').addEventListener('change', function(e) { state.profile.industry = e.target.value || null; });
+
+  el('btn-back-intro').addEventListener('click', renderIntro);
+  el('btn-next-profile').addEventListener('click', function() {
+    if (state.profile.orgType === null || state.profile.servesYouth === null) {
+      el('err-profile').classList.remove('hidden');
+      return;
+    }
+    renderTools();
+  });
+}
+
+function radioBtn(name, value, label, selected) {
+  return '<label class="radio-opt' + (selected ? ' selected' : '') + '" data-name="' + name + '" data-value="' + value + '">' +
+    '<input type="radio" name="' + name + '" value="' + value + '"' + (selected ? ' checked' : '') + '>' +
+    '<span>' + label + '</span></label>';
+}
+
+function checkBtn(name, value, label, selected) {
+  return '<label class="check-opt' + (selected ? ' selected' : '') + '" data-name="' + name + '" data-value="' + value + '">' +
+    '<input type="checkbox" name="' + name + '" value="' + value + '"' + (selected ? ' checked' : '') + '>' +
+    '<span>' + label + '</span></label>';
+}
+
+function attachRadioHandlers(name, onChange) {
+  document.querySelectorAll('.radio-opt[data-name="' + name + '"]').forEach(function(el) {
+    el.addEventListener('click', function() {
+      document.querySelectorAll('.radio-opt[data-name="' + name + '"]').forEach(function(other) {
+        other.classList.remove('selected');
+        other.querySelector('input').checked = false;
+      });
+      el.classList.add('selected');
+      el.querySelector('input').checked = true;
+      onChange(el.getAttribute('data-value'));
+    });
+  });
+}
+
+function attachCheckHandlers(name, targetArray) {
+  document.querySelectorAll('.check-opt[data-name="' + name + '"]').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+      if (e.target.tagName === 'INPUT') return;
+      var v = el.getAttribute('data-value');
+      var input = el.querySelector('input');
+      var idx = targetArray.indexOf(v);
+      if (idx === -1) {
+        targetArray.push(v);
+        el.classList.add('selected');
+        input.checked = true;
+      } else {
+        targetArray.splice(idx, 1);
+        el.classList.remove('selected');
+        input.checked = false;
+      }
+    });
+    el.querySelector('input').addEventListener('change', function(e) {
+      var v = el.getAttribute('data-value');
+      var idx = targetArray.indexOf(v);
+      if (e.target.checked && idx === -1) {
+        targetArray.push(v);
+        el.classList.add('selected');
+      } else if (!e.target.checked && idx !== -1) {
+        targetArray.splice(idx, 1);
+        el.classList.remove('selected');
+      }
+    });
+  });
+}
+
+function renderTools() {
+  show('stage-tools');
+  renderStepper('tools');
+  var filteredTools = filterToolsForProfile(state.profile);
+  el('stage-tools').innerHTML = '' +
+    '<div class="hero">' +
+      '<p class="kicker">Step 2 of 4</p>' +
+      '<h1>Which AI tools does your team use?</h1>' +
+      '<p class="lede">Select any tools currently in use. This is used to flag known-risky tools in your report and tailor recommendations. Skip if none apply.</p>' +
+    '</div>' +
+
+    '<div class="callout info">' +
+      '<strong>How classifications work:</strong> Each tool is classified based on documented data handling defaults, published safety incidents, active litigation, and organizational control availability. Classifications are point-in-time and link to primary sources. Verify current status before restricting a tool your organization depends on.' +
+    '</div>' +
+
+    '<div class="tools-search">' +
+      '<input type="text" id="tools-search" placeholder="Search tools..." />' +
+    '</div>' +
+
+    '<div id="tools-container"></div>' +
+
+    '<div class="field-group" style="margin-top: 1.5rem;">' +
+      '<label class="field-label">Add a tool not listed</label>' +
+      '<div class="other-tool-input">' +
+        '<input type="text" id="other-tool-input" placeholder="Tool name" />' +
+        '<button id="btn-add-other">Add</button>' +
+      '</div>' +
+      '<div id="other-tools-display" class="other-tool-list"></div>' +
+    '</div>' +
+
+    '<div class="row" style="margin-top: 1.5rem;">' +
+      '<button id="btn-back-tools">Back</button>' +
+      '<div style="flex:1"></div>' +
+      '<button id="btn-skip-tools">Skip</button>' +
+      '<button id="btn-next-tools" class="primary">Continue</button>' +
+    '</div>';
+
+  renderToolsList(filteredTools);
+  renderOtherTools();
+
+  el('tools-search').addEventListener('input', function(e) {
+    var query = e.target.value.toLowerCase();
+    var results = TOOL_MASTER_LIST.filter(function(t) {
+      return t.name.toLowerCase().indexOf(query) !== -1 || t.category.toLowerCase().indexOf(query) !== -1;
+    });
+    renderToolsList(results);
+  });
+
+  el('btn-add-other').addEventListener('click', addOtherTool);
+  el('other-tool-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') addOtherTool();
+  });
+
+  el('btn-back-tools').addEventListener('click', renderProfile);
+  el('btn-skip-tools').addEventListener('click', renderDepth);
+  el('btn-next-tools').addEventListener('click', renderDepth);
+}
+
+function renderToolsList(tools) {
+  var container = el('tools-container');
+  if (tools.length === 0) {
+    container.innerHTML = '<p class="empty-tools">No tools match your search. Try a different term or add it via "Add a tool not listed" below.</p>';
+    return;
+  }
+  container.innerHTML = '<div class="tools-grid">' +
+    tools.map(function(t) {
+      var selected = state.toolsSelected.indexOf(t.id) !== -1;
+      var badgeCls = t.classification === 'high-risk' ? 'high' : (t.classification === 'caution' ? 'caution' : 'low');
+      var badgeLabel = t.classification === 'high-risk' ? 'High risk' : (t.classification === 'caution' ? 'Caution' : 'Lower risk');
+      return '<label class="tool-card' + (selected ? ' selected' : '') + '" data-id="' + t.id + '">' +
+        '<input type="checkbox"' + (selected ? ' checked' : '') + '>' +
+        '<div class="tool-info">' +
+          '<p class="tool-name">' + t.name + '<span class="tool-badge ' + badgeCls + '">' + badgeLabel + '</span></p>' +
+          '<p class="tool-meta">' + t.category + '</p>' +
+        '</div>' +
+      '</label>';
+    }).join('') +
+  '</div>';
+
+  document.querySelectorAll('.tool-card').forEach(function(card) {
+    card.addEventListener('click', function(e) {
+      if (e.target.tagName === 'INPUT') return;
+      toggleTool(card.getAttribute('data-id'), card);
+    });
+    card.querySelector('input').addEventListener('change', function() {
+      toggleTool(card.getAttribute('data-id'), card, true);
+    });
+  });
+}
+
+function toggleTool(id, card, fromCheckbox) {
+  var idx = state.toolsSelected.indexOf(id);
+  var input = card.querySelector('input');
+  if (idx === -1) {
+    state.toolsSelected.push(id);
+    card.classList.add('selected');
+    if (!fromCheckbox) input.checked = true;
+  } else {
+    state.toolsSelected.splice(idx, 1);
+    card.classList.remove('selected');
+    if (!fromCheckbox) input.checked = false;
+  }
+}
+
+function addOtherTool() {
+  var input = el('other-tool-input');
+  var name = input.value.trim();
+  if (!name) return;
+  if (state.otherTools.indexOf(name) === -1) {
+    state.otherTools.push(name);
+    renderOtherTools();
+  }
+  input.value = '';
+  input.focus();
+}
+
+function renderOtherTools() {
+  var display = el('other-tools-display');
+  if (!display) return;
+  display.innerHTML = state.otherTools.map(function(name, i) {
+    return '<span class="other-tag">' + escapeHtml(name) + 
+      '<button data-idx="' + i + '" aria-label="Remove">×</button></span>';
+  }).join('');
+  display.querySelectorAll('button').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var i = parseInt(btn.getAttribute('data-idx'), 10);
+      state.otherTools.splice(i, 1);
+      renderOtherTools();
+    });
+  });
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderDepth() {
+  show('stage-depth');
+  renderStepper('depth');
+  var modules = getApplicableModules(state.profile);
+  var moduleText = modules.length > 1 ? 
+    ' Because you\'re ' + (state.profile.orgType === 'nonprofit' ? 'a nonprofit' : '') +
+    (state.profile.orgType === 'nonprofit' && state.profile.servesYouth ? ' and ' : '') +
+    (state.profile.servesYouth ? 'serve people under 18' : '') +
+    ', additional questions from the ' + 
+    (modules.filter(function(m) { return m !== 'base'; }).map(function(m) { return m === 'nonprofit' ? 'nonprofit' : 'youth-serving'; }).join(' and ')) +
+    ' module' + (modules.length > 2 ? 's' : '') + ' will also apply.' : '';
+
+  el('stage-depth').innerHTML = '' +
+    '<div class="hero">' +
+      '<p class="kicker">Step 3 of 4</p>' +
+      '<h1>Pick your assessment depth</h1>' +
+      '<p class="lede">All three depths return the same report structure.' + moduleText + '</p>' +
+    '</div>' +
+
+    '<div class="choice-grid" id="depth-grid">' +
+      '<button class="choice" data-depth="quick">' +
+        '<h3>Quick</h3>' +
+        '<p class="meta">' + questionCountForDepth('quick') + ' questions, about 5 minutes</p>' +
+        '<p>Directional read. Light on nuance.</p>' +
+      '</button>' +
+      '<button class="choice" data-depth="standard">' +
+        '<h3>Standard <span class="badge">Recommended</span></h3>' +
+        '<p class="meta">' + questionCountForDepth('standard') + ' questions, about 15 minutes</p>' +
+        '<p>Balanced coverage across all four NIST functions.</p>' +
+      '</button>' +
+      '<button class="choice" data-depth="comprehensive">' +
+        '<h3>Comprehensive</h3>' +
+        '<p class="meta">' + questionCountForDepth('comprehensive') + ' questions, about 30 minutes</p>' +
+        '<p>Most accurate. Best if preparing for a review or audit.</p>' +
+      '</button>' +
+    '</div>' +
+
+    '<p id="err-depth" class="err hidden">Pick a depth to continue.</p>' +
+
+    '<div class="row" style="margin-top: 1rem;">' +
+      '<button id="btn-back-depth">Back</button>' +
+      '<div style="flex:1"></div>' +
+      '<button id="btn-start-quiz" class="primary" disabled>Start assessment</button>' +
+    '</div>';
+
+  document.querySelectorAll('#depth-grid .choice').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#depth-grid .choice').forEach(function(b) { b.classList.remove('selected'); });
+      btn.classList.add('selected');
+      state.depth = btn.getAttribute('data-depth');
+      el('btn-start-quiz').disabled = false;
+    });
+  });
+
+  el('btn-back-depth').addEventListener('click', renderTools);
+  el('btn-start-quiz').addEventListener('click', function() {
+    if (!state.depth) {
+      el('err-depth').classList.remove('hidden');
+      return;
+    }
+    state.questions = getQuestionsForAssessment(state.profile, state.depth);
+    state.idx = 0;
+    state.answers = {};
+    renderQuestion();
+  });
+}
+
+function questionCountForDepth(depth) {
+  return getQuestionsForAssessment(state.profile, depth).length;
+}
+
+function renderQuestion() {
+  show('stage-quiz');
+  renderStepper('assess');
+  var q = state.questions[state.idx];
+  var total = state.questions.length;
+  var pct = Math.round((state.idx / total) * 100);
+  var moduleLabel = q.module === 'nonprofit' ? 'Nonprofit module' : (q.module === 'youth' ? 'Youth-serving module' : FRAMEWORK.functions[q.fn].name);
+
+  el('stage-quiz').innerHTML = '' +
+    '<div class="qcard">' +
+      '<div class="qhead">' +
+        '<span>Question ' + (state.idx + 1) + ' of ' + total + '</span>' +
+        '<span class="qmodule">' + moduleLabel + '</span>' +
+      '</div>' +
+      '<div class="progress"><span style="width:' + pct + '%"></span></div>' +
+      '<p class="qtext">' + q.text + '</p>' +
+      (q.hint ? '<p class="qmeta">' + q.hint + '</p>' : '') +
+      '<div class="options" id="opts">' +
+        q.options.map(function(o) {
+          return '<label class="opt' + (state.answers[q.id] === o.v ? ' selected' : '') + '" data-v="' + o.v + '">' +
+                 '<input type="radio" name="q" value="' + o.v + '"' + (state.answers[q.id] === o.v ? ' checked' : '') + '>' +
+                 '<span>' + o.label + '</span>' +
+                 '</label>';
+        }).join('') +
+      '</div>' +
+      '<p class="err hidden" id="err">Pick an answer to continue.</p>' +
+      '<div class="nav">' +
+        '<button id="btn-back-q"' + (state.idx === 0 ? ' disabled' : '') + '>Back</button>' +
+        '<span class="spacer"></span>' +
+        '<button id="btn-next-q" class="primary">' + (state.idx === total - 1 ? 'See report' : 'Next') + '</button>' +
+      '</div>' +
+    '</div>';
+
+  document.querySelectorAll('#opts .opt').forEach(function(opt) {
+    opt.addEventListener('click', function() {
+      var v = parseInt(opt.getAttribute('data-v'), 10);
+      state.answers[q.id] = v;
+      document.querySelectorAll('#opts .opt').forEach(function(o) { o.classList.remove('selected'); });
+      opt.classList.add('selected');
+      opt.querySelector('input').checked = true;
+      el('err').classList.add('hidden');
+    });
+  });
+
+  el('btn-back-q').addEventListener('click', function() {
+    if (state.idx > 0) { state.idx--; renderQuestion(); }
+    else { renderDepth(); }
+  });
+  el('btn-next-q').addEventListener('click', function() {
+    if (state.answers[q.id] === undefined) {
+      el('err').classList.remove('hidden');
+      return;
+    }
+    if (state.idx === state.questions.length - 1) {
+      renderReport();
+    } else {
+      state.idx++;
+      renderQuestion();
+    }
+  });
+}
+
+function renderReport() {
+  show('stage-report');
+  renderStepper('report');
+
+  var scores = computeScores(state.questions, state.answers);
+  var tier = computeTier(scores.overall);
+  var gaps = identifyGaps(state.questions, state.answers);
+  var recs = buildRecommendations(gaps).slice(0, 8);
+  var toolAnalysis = classifyToolsInUse(state.toolsSelected, state.otherTools);
+  var modules = getApplicableModules(state.profile);
+
+  var highCount = gaps.filter(function(g) { return g.priority === 'high'; }).length;
+  var medCount = gaps.filter(function(g) { return g.priority === 'medium'; }).length;
+
+  var confidenceNote;
+  if (state.depth === 'quick') confidenceNote = 'Based on a Quick assessment. Directional only. Retake at Standard depth before acting on this.';
+  else if (state.depth === 'standard') confidenceNote = 'Based on the Standard assessment. Solid enough for planning; take Comprehensive if preparing for an audit or vendor review.';
+  else confidenceNote = 'Based on the Comprehensive assessment. Highest confidence.';
+
+  var industryLabel = state.profile.industry ? INDUSTRIES.find(function(i) { return i.id === state.profile.industry; }).label : '';
+  var scopeText = buildScopeText(state.profile, modules);
+
+  var html = '' +
+    '<div class="hero"><p class="kicker">Your report</p><h1>AI governance readiness</h1>' +
+    '<p class="lede">Based on the NIST AI Risk Management Framework' + (industryLabel ? ', tailored for ' + industryLabel : '') + '.</p></div>';
+
+  if (scopeText) {
+    html += '<div class="scope-banner"><strong>What\'s in this report:</strong> ' + scopeText + '</div>';
+  }
+
+  html += '<div class="stat-grid">' +
+    '<div class="stat"><p class="stat-label">Overall readiness</p><p class="stat-value">' + scores.overall + '%</p></div>' +
+    '<div class="stat"><p class="stat-label">Risk tier</p><p class="stat-value small"><span class="tier-pill ' + tier.cssClass + '">' + tier.label + '</span></p></div>' +
+    '<div class="stat"><p class="stat-label">Critical gaps</p><p class="stat-value">' + highCount + '</p></div>' +
+    '<div class="stat"><p class="stat-label">Moderate gaps</p><p class="stat-value">' + medCount + '</p></div>' +
+  '</div>';
+
+  html += '<div class="callout">' + tier.desc + '</div>';
+
+  // Tool review section (new in v2)
+  if (state.toolsSelected.length > 0 || state.otherTools.length > 0) {
+    html += '<div class="section"><h2>AI tools currently in use</h2>' + renderToolReview(toolAnalysis) + '</div>';
+  }
+
+  // Gap map
+  html += '<div class="section"><h2>Gap map across NIST functions</h2><div class="fn-grid">' +
+    Object.keys(FRAMEWORK.functions).map(function(k) {
+      var s = scores.fnScores[k];
+      var pct = s.max === 0 ? 0 : Math.round((s.sum / s.max) * 100);
+      return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3><span class="fn-score">' + pct + '%</span></div>' +
+        '<div class="bar"><span style="width:' + pct + '%"></span></div>' +
+        '<p class="fn-desc">' + FRAMEWORK.functions[k].desc + '</p></div>';
+    }).join('') + '</div></div>';
+
+  // Recommendations
+  html += '<div class="section"><h2>Prioritized recommendations</h2>' +
+    (recs.length === 0 ? '<div class="callout">You have strong foundations. Lock in a quarterly review to keep governance current.</div>' :
+    recs.map(function(r) {
+      var cls = r.priority === 'high' ? 'prio-high' : (r.priority === 'medium' ? 'prio-med' : 'prio-low');
+      var plabel = r.priority === 'high' ? 'High priority' : (r.priority === 'medium' ? 'Medium priority' : 'Maintain');
+      var moduleTag = r.module !== 'base' ? ' • ' + (r.module === 'nonprofit' ? 'Nonprofit module' : 'Youth-serving module') : '';
+      return '<div class="rec"><div class="rec-head"><p class="rec-title">' + r.title + '</p>' +
+        '<span class="' + cls + '">' + plabel + '</span></div>' +
+        '<p class="rec-meta">' + FRAMEWORK.functions[r.fn].name + ' function' + moduleTag + '</p>' +
+        '<p class="rec-body">' + r.body + '</p></div>';
+    }).join('')) + '</div>';
+
+  // Roadmap
+  var high = recs.filter(function(r) { return r.priority === 'high'; }).slice(0, 3);
+  var med = recs.filter(function(r) { return r.priority === 'medium'; }).slice(0, 3);
+  html += '<div class="section"><h2>Maturity roadmap</h2><div class="roadmap">' +
+    '<div class="phase"><p class="plabel">Next 90 days</p><h4>Close critical gaps</h4><ul>' +
+      (high.length ? high.map(function(r) { return '<li>' + r.title + '</li>'; }).join('') : '<li>No critical gaps.</li>') +
+    '</ul></div>' +
+    '<div class="phase"><p class="plabel">3 to 6 months</p><h4>Build the operating rhythm</h4><ul>' +
+      (med.length ? med.map(function(r) { return '<li>' + r.title + '</li>'; }).join('') : '<li>Establish quarterly review.</li>') +
+    '</ul></div>' +
+    '<div class="phase"><p class="plabel">6 to 12 months</p><h4>Formalize and prove</h4>' +
+      '<ul><li>Establish a quarterly governance review</li><li>Document a lightweight AI incident playbook</li><li>Add AI risk to standard vendor onboarding</li></ul>' +
+    '</div></div></div>';
+
+  html += '<div class="row" style="margin-top: 1.5rem;">' +
+    '<button id="btn-restart">Start over</button>' +
+    '<div style="flex:1"></div>' +
+    '<button id="btn-print" class="primary">Print or save as PDF</button>' +
+  '</div>';
+
+  html += '<p class="disclaimer"><strong>About this tool.</strong> Built on the NIST AI Risk Management Framework (Govern, Map, Measure, Manage). Confidence: ' + confidenceNote + ' Tool classifications are point-in-time (last reviewed April 2026) and criteria-based. This is a self-assessment for internal planning, not a compliance certification or legal advice.</p>';
+
+  el('stage-report').innerHTML = html;
+
+  el('btn-restart').addEventListener('click', function() {
+    state.profile = { orgType: null, servesYouth: null, industry: null, size: null, region: null, regulated: [], customerType: null, aiMaturity: null };
+    state.toolsSelected = [];
+    state.otherTools = [];
+    state.depth = null;
+    state.questions = [];
+    state.answers = {};
+    state.idx = 0;
+    renderIntro();
+  });
+  el('btn-print').addEventListener('click', function() { window.print(); });
+}
+
+function renderToolReview(analysis) {
+  var html = '';
+  if (analysis.flagged['high-risk'].length > 0) {
+    html += '<div class="callout warning"><strong>High-risk tools flagged in your inventory.</strong> These tools have documented safety incidents, active litigation, or fundamental absence of organizational controls. Consider restricting use.</div>';
+    analysis.flagged['high-risk'].forEach(function(t) {
+      html += renderToolCard(t);
+    });
+  }
+  if (analysis.flagged['caution'].length > 0) {
+    html += '<p style="font-size: 13px; color: var(--text-secondary); margin: 1rem 0 0.5rem;"><strong>Tools requiring caution.</strong> These have settings that should be verified before organizational use.</p>';
+    analysis.flagged['caution'].forEach(function(t) {
+      html += renderToolCard(t);
+    });
+  }
+  if (analysis.flagged['lower-risk'].length > 0) {
+    html += '<p style="font-size: 13px; color: var(--text-secondary); margin: 1rem 0 0.5rem;"><strong>Lower-risk tools in your inventory.</strong></p>';
+    analysis.flagged['lower-risk'].forEach(function(t) {
+      html += renderToolCard(t);
+    });
+  }
+  if (analysis.otherTools.length > 0) {
+    html += '<p style="font-size: 13px; color: var(--text-secondary); margin: 1rem 0 0.5rem;"><strong>Tools not in our reviewed list.</strong> Not classified by this tool. Review independently.</p>';
+    html += '<div style="display: flex; gap: 6px; flex-wrap: wrap;">' +
+      analysis.otherTools.map(function(name) {
+        return '<span class="other-tag">' + escapeHtml(name) + '</span>';
+      }).join('') + '</div>';
+  }
+  return html;
+}
+
+function renderToolCard(t) {
+  return '<div class="tool-review">' +
+    '<div class="tool-review-head">' +
+      '<p class="tool-review-name">' + t.name + '</p>' +
+      '<span class="tool-badge ' + (t.classification === 'high-risk' ? 'high' : (t.classification === 'caution' ? 'caution' : 'low')) + '">' +
+        (t.classification === 'high-risk' ? 'High risk' : (t.classification === 'caution' ? 'Caution' : 'Lower risk')) +
+      '</span>' +
+    '</div>' +
+    '<p class="tool-review-body">' + t.reasoning + '</p>' +
+    '<p class="tool-review-sources">Sources: ' + t.sources.join('; ') + ' • Last reviewed: ' + t.lastReviewed + '</p>' +
+  '</div>';
+}
+
+function buildScopeText(profile, modules) {
+  var parts = ['NIST AI Risk Management Framework (base assessment)'];
+  if (modules.indexOf('nonprofit') !== -1) parts.push('Nonprofit module (based on validated consulting work)');
+  if (modules.indexOf('youth') !== -1) parts.push('Youth-serving module (COPPA and safeguards, based on validated consulting work)');
+  var text = parts.join(', ') + '.';
+  if (profile.industry && ['healthcare','financial','education','government'].indexOf(profile.industry) !== -1) {
+    var industryLabel = INDUSTRIES.find(function(i) { return i.id === profile.industry; }).label;
+    text += ' Industry-specific overlays for ' + industryLabel + ' are on the roadmap and not yet included in this version. The base assessment applies but does not cover sector-specific regulations (e.g., HIPAA for healthcare, SR 11-7 for financial services, FERPA for education, FedRAMP for government).';
+  }
+  return text;
+}
+
+// Start
+renderIntro();
+</script>
+</body>
+</html>
