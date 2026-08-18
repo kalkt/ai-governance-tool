@@ -5,7 +5,10 @@ import {
   identifyGaps,
   buildRecommendations,
   getApplicableModules,
-  getQuestionsForAssessment
+  getQuestionsForAssessment,
+  classifyToolsInUse,
+  filterToolsForProfile,
+  hasIndustryOverlay
 } from '../src/logic.js';
 import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS } from '../src/data.js';
 
@@ -344,5 +347,83 @@ describe('getQuestionsForAssessment', () => {
     const lastBaseIndex = modules.lastIndexOf('base');
     expect(lastBaseIndex).toBeLessThan(firstNonprofitIndex);
     expect(modules.lastIndexOf('nonprofit')).toBeLessThan(firstYouthIndex);
+  });
+});
+
+describe('classifyToolsInUse', () => {
+  it('returns empty buckets and passes through otherTools unchanged when no tools are selected', () => {
+    const result = classifyToolsInUse([], ['Some Custom Tool']);
+    expect(result.flagged['high-risk']).toEqual([]);
+    expect(result.flagged['caution']).toEqual([]);
+    expect(result.flagged['lower-risk']).toEqual([]);
+    expect(result.otherTools).toEqual(['Some Custom Tool']);
+  });
+
+  it('buckets tools of different classifications into their respective arrays', () => {
+    const result = classifyToolsInUse(['t-grok', 't-chatgpt', 't-canva'], []);
+    expect(result.flagged['high-risk'].map(t => t.id)).toEqual(['t-grok']);
+    expect(result.flagged['caution'].map(t => t.id)).toEqual(['t-chatgpt']);
+    expect(result.flagged['lower-risk'].map(t => t.id)).toEqual(['t-canva']);
+  });
+
+  it('silently excludes a selected id that does not exist in TOOL_MASTER_LIST, rather than producing undefined or throwing', () => {
+    expect(() => classifyToolsInUse(['does-not-exist'], [])).not.toThrow();
+    const result = classifyToolsInUse(['does-not-exist'], []);
+    expect(result.flagged['high-risk']).toEqual([]);
+    expect(result.flagged['caution']).toEqual([]);
+    expect(result.flagged['lower-risk']).toEqual([]);
+  });
+
+  it('includes a tool twice in its bucket when its id appears twice in selectedToolIds, since no deduplication is applied', () => {
+    const result = classifyToolsInUse(['t-canva', 't-canva'], []);
+    expect(result.flagged['lower-risk']).toHaveLength(2);
+  });
+});
+
+describe('filterToolsForProfile', () => {
+  it("includes tools tagged 'all' regardless of the profile's industry", () => {
+    const result = filterToolsForProfile({ industry: 'healthcare' });
+    expect(result.some(t => t.id === 't-grammarly')).toBe(true);
+  });
+
+  it("includes an industry-specific tool when it matches the profile's industry", () => {
+    const result = filterToolsForProfile({ industry: 'healthcare' });
+    expect(result.some(t => t.id === 't-abridge')).toBe(true);
+  });
+
+  it("excludes an industry-specific tool that doesn't match the profile's industry and isn't tagged 'all'", () => {
+    const result = filterToolsForProfile({ industry: 'healthcare' });
+    expect(result.some(t => t.id === 't-github-copilot')).toBe(false);
+  });
+
+  it('includes a tool tagged with multiple specific industries when the profile matches any one of them', () => {
+    expect(filterToolsForProfile({ industry: 'financial' }).some(t => t.id === 't-hebbia')).toBe(true);
+    expect(filterToolsForProfile({ industry: 'professional' }).some(t => t.id === 't-hebbia')).toBe(true);
+    expect(filterToolsForProfile({ industry: 'retail' }).some(t => t.id === 't-hebbia')).toBe(false);
+  });
+
+  it("returns only 'all'-tagged tools when profile.industry is null", () => {
+    const result = filterToolsForProfile({ industry: null });
+    expect(result.every(t => t.industries.indexOf('all') !== -1)).toBe(true);
+    expect(result.some(t => t.id === 't-abridge')).toBe(false);
+  });
+
+  it("returns only 'all'-tagged tools when profile.industry doesn't match any tool's industry list", () => {
+    const result = filterToolsForProfile({ industry: 'not-a-real-industry' });
+    expect(result.every(t => t.industries.indexOf('all') !== -1)).toBe(true);
+  });
+});
+
+describe('hasIndustryOverlay', () => {
+  it('returns false for a nonprofit/youth-serving profile, since overlays are handled via independent modules instead', () => {
+    expect(hasIndustryOverlay({ orgType: 'nonprofit', servesYouth: true, industry: 'nonprofit-social' })).toBe(false);
+  });
+
+  it('returns false for a healthcare profile, documenting that no industry-specific overlay is implemented yet in v2', () => {
+    expect(hasIndustryOverlay({ orgType: 'for-profit', servesYouth: false, industry: 'healthcare' })).toBe(false);
+  });
+
+  it('returns false when called with no argument at all', () => {
+    expect(hasIndustryOverlay()).toBe(false);
   });
 });
