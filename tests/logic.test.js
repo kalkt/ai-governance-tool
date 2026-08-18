@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { computeTier, computeScores, identifyGaps, buildRecommendations } from '../src/logic.js';
-import { REC_TITLES, REC_BODIES, FRAMEWORK } from '../src/data.js';
+import {
+  computeTier,
+  computeScores,
+  identifyGaps,
+  buildRecommendations,
+  getApplicableModules,
+  getQuestionsForAssessment
+} from '../src/logic.js';
+import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS } from '../src/data.js';
 
 describe('computeTier', () => {
   it('classifies a score of exactly 70 as low risk (lower boundary of the low tier)', () => {
@@ -242,5 +249,100 @@ describe('buildRecommendations', () => {
     const gaps = [{ fn: 'govern', module: 'base', v: 0, priority: 'high', q: { id: 'np1', module: 'nonprofit' } }];
     const recs = buildRecommendations(gaps);
     expect(recs[0].module).toBe('nonprofit');
+  });
+});
+
+describe('getApplicableModules', () => {
+  it('returns only the base module for a for-profit organization that does not serve youth', () => {
+    const modules = getApplicableModules({ orgType: 'for-profit', servesYouth: false });
+    expect(modules).toEqual(['base']);
+  });
+
+  it("adds the nonprofit module when orgType is 'nonprofit'", () => {
+    const modules = getApplicableModules({ orgType: 'nonprofit', servesYouth: false });
+    expect(modules).toEqual(['base', 'nonprofit']);
+  });
+
+  it('adds the youth module when servesYouth is true', () => {
+    const modules = getApplicableModules({ orgType: 'for-profit', servesYouth: true });
+    expect(modules).toEqual(['base', 'youth']);
+  });
+
+  it('adds both the nonprofit and youth modules, in that order, when both conditions are true', () => {
+    const modules = getApplicableModules({ orgType: 'nonprofit', servesYouth: true });
+    expect(modules).toEqual(['base', 'nonprofit', 'youth']);
+  });
+
+  it('returns only the base module when orgType and servesYouth are both null', () => {
+    const modules = getApplicableModules({ orgType: null, servesYouth: null });
+    expect(modules).toEqual(['base']);
+  });
+
+  it('does not add the youth module when servesYouth is a truthy non-boolean value, since the check is strict equality to true', () => {
+    const modules = getApplicableModules({ orgType: 'for-profit', servesYouth: 'true' });
+    expect(modules).toEqual(['base']);
+  });
+
+  it("does not add the nonprofit module when orgType has different casing than the literal string 'nonprofit'", () => {
+    const modules = getApplicableModules({ orgType: 'Nonprofit', servesYouth: false });
+    expect(modules).toEqual(['base']);
+  });
+});
+
+describe('getQuestionsForAssessment', () => {
+  const forProfit = { orgType: 'for-profit', servesYouth: false };
+  const nonprofitOnly = { orgType: 'nonprofit', servesYouth: false };
+  const youthOnly = { orgType: 'for-profit', servesYouth: true };
+  const nonprofitAndYouth = { orgType: 'nonprofit', servesYouth: true };
+
+  function idsOf(questions) { return questions.map(q => q.id); }
+  function atDepth(pool, depth) { return pool.filter(q => q.depths.indexOf(depth) !== -1); }
+
+  it('returns only base questions for a for-profit organization that does not serve youth', () => {
+    const result = getQuestionsForAssessment(forProfit, 'standard');
+    expect(idsOf(result)).toEqual(idsOf(atDepth(BASE_QUESTIONS, 'standard')));
+  });
+
+  it('returns base and nonprofit questions, but no youth questions, for a nonprofit org that does not serve youth', () => {
+    const result = getQuestionsForAssessment(nonprofitOnly, 'comprehensive');
+    const expected = idsOf(atDepth(BASE_QUESTIONS, 'comprehensive')).concat(idsOf(atDepth(NONPROFIT_QUESTIONS, 'comprehensive')));
+    expect(idsOf(result)).toEqual(expected);
+    expect(result.some(q => q.module === 'youth')).toBe(false);
+  });
+
+  it('returns base and youth questions, but no nonprofit questions, for a for-profit org that serves youth', () => {
+    const result = getQuestionsForAssessment(youthOnly, 'comprehensive');
+    const expected = idsOf(atDepth(BASE_QUESTIONS, 'comprehensive')).concat(idsOf(atDepth(YOUTH_QUESTIONS, 'comprehensive')));
+    expect(idsOf(result)).toEqual(expected);
+    expect(result.some(q => q.module === 'nonprofit')).toBe(false);
+  });
+
+  it('returns questions from all three pools for a nonprofit org that also serves youth', () => {
+    const result = getQuestionsForAssessment(nonprofitAndYouth, 'comprehensive');
+    const expected = idsOf(atDepth(BASE_QUESTIONS, 'comprehensive'))
+      .concat(idsOf(atDepth(NONPROFIT_QUESTIONS, 'comprehensive')))
+      .concat(idsOf(atDepth(YOUTH_QUESTIONS, 'comprehensive')));
+    expect(idsOf(result)).toEqual(expected);
+  });
+
+  it('returns fewer questions at quick depth than at comprehensive depth for the same profile', () => {
+    const quickCount = getQuestionsForAssessment(forProfit, 'quick').length;
+    const comprehensiveCount = getQuestionsForAssessment(forProfit, 'comprehensive').length;
+    expect(quickCount).toBeLessThan(comprehensiveCount);
+  });
+
+  it('returns an empty array when the depth does not match any question', () => {
+    const result = getQuestionsForAssessment(nonprofitAndYouth, 'nonexistent-depth');
+    expect(result).toEqual([]);
+  });
+
+  it('orders the returned questions as base first, then nonprofit, then youth', () => {
+    const result = getQuestionsForAssessment(nonprofitAndYouth, 'quick');
+    const modules = result.map(q => q.module);
+    const firstNonprofitIndex = modules.indexOf('nonprofit');
+    const firstYouthIndex = modules.indexOf('youth');
+    const lastBaseIndex = modules.lastIndexOf('base');
+    expect(lastBaseIndex).toBeLessThan(firstNonprofitIndex);
+    expect(modules.lastIndexOf('nonprofit')).toBeLessThan(firstYouthIndex);
   });
 });
