@@ -28,3 +28,8 @@ npm-debug.log*
 # Testing (for later)
 coverage/
 .nyc_output/
+
+# Playwright (regenerated on every e2e run)
+test-results/
+playwright-report/
+blob-report/
