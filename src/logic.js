@@ -243,3 +243,51 @@ export function applyRoleFraming(recs, role, scope) {
     return { priority: r.priority, fn: r.fn, module: r.module, title: r.title, body: r.body + ' ' + caveat };
   });
 }
+
+// ============================================================================
+// DEPARTMENT -> VISIBILITY-TAG INFERENCE (B4, backlog SS1.4.12/SS1.4.13):
+// department -- not role alone -- determines which VISIBILITY_TAGS (data.js) a
+// respondent can answer with real evidence. An engineering department can
+// answer technical-build questions regardless of whether the respondent is
+// leadership, a department member, or an individual employee; role instead
+// determines how many tags/how much of the item pool they see overall.
+//
+// Deliberately NOT wired into getQuestionsForAssessment/getApplicableModules
+// here -- that item-bank routing is B8/B11's job once this data model is
+// reviewed. This only exposes the department -> tag mapping itself, per B4's
+// "design the data model" scope.
+//
+// Keyed by DEPARTMENTS' ids directly (data.js) rather than importing that
+// array, matching how scopeSubject/describeScope above key off SCOPE_OPTIONS'
+// id strings without importing SCOPE_OPTIONS itself.
+// ============================================================================
+
+var DEPARTMENT_VISIBILITY_MAP = {
+  'executive': ['strategic', 'operational'],
+  'it-engineering': ['technical-build', 'operational'],
+  'legal': ['legal-compliance', 'operational'],
+  'hr-people': ['operational'],
+  'finance': ['operational'],
+  'marketing-comms': ['operational'],
+  'sales-bizdev': ['operational'],
+  'operations': ['operational'],
+  'customer-support': ['operational'],
+  'other': ['operational']
+};
+
+// Every recognized department confers at least 'operational' visibility --
+// day-to-day process questions about one's own function, per that tag's
+// definition in SS1.4.12. Only 'executive' additionally confers 'strategic'
+// (org-wide policy/budget vantage), only 'it-engineering' additionally
+// confers 'technical-build', and only 'legal' additionally confers
+// 'legal-compliance' -- one specialized tag per department that obviously
+// maps to it, matching each tag's own definition rather than assuming broader
+// access. A missing or unrecognized department id falls back to
+// ['operational'] too: the safest non-empty assumption when there is nothing
+// to anchor a more specific claim to (e.g. an employee respondent who left
+// the optional department field blank).
+export function getVisibilityTagsForDepartment(departmentId) {
+  // .slice() so a caller mutating the returned array can't corrupt the
+  // shared internal map for every future call.
+  return (DEPARTMENT_VISIBILITY_MAP[departmentId] || ['operational']).slice();
+}

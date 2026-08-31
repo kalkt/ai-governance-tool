@@ -90,6 +90,56 @@ export const ROLE_OPTIONS = [
     hasDepartmentField: true }
 ];
 
+// Department taxonomy (B4, backlog SS1.4.13/Deliverable 2). Feeds
+// getVisibilityTagsForDepartment() in logic.js -- NOT wired into question
+// routing/getQuestionsForAssessment yet, that's B8/B11's job once this data
+// model exists.
+//
+// This is a genuinely new, small starter list, not derived from an existing
+// fixed taxonomy anywhere in the codebase -- ROLE_OPTIONS' employee.department
+// and SCOPE_OPTIONS' department-scope name are both free text today, with no
+// canonical department list backing either one (see backlog SS1.4.13's
+// Department-entity note for why, and for how these free-text fields are
+// designed to eventually reconcile with this list once a real backend
+// exists). Flagged explicitly as a starting point for Kartik's review, not
+// asserted as final -- narrow it, rename it, or expand it as needed before
+// B8 depends on it.
+//
+// Naming note: 'executive' (not 'leadership') and 'legal' (not
+// 'legal-compliance') are deliberate. ROLE_OPTIONS already uses the id
+// 'leadership' for a different axis (respondent role, above), and
+// VISIBILITY_TAGS below already uses 'legal-compliance' for a different axis
+// (question visibility). Reusing either string here for this third, distinct
+// concept (organizational department) would recreate the exact ambiguity R9
+// already flagged and renamed away from once ("enterprise-wide" -> "strategic",
+// to avoid colliding with SCOPE_OPTIONS' 'org'). 'operations' (department) vs.
+// 'operational' (tag, below) was considered too -- kept as-is since the
+// strings are not identical and the two concepts are never compared for
+// equality against each other in code, unlike the two collisions above.
+export const DEPARTMENTS = [
+  { id: 'executive', label: 'Executive / Leadership' },
+  { id: 'it-engineering', label: 'IT / Engineering' },
+  { id: 'legal', label: 'Legal / Compliance' },
+  { id: 'hr-people', label: 'HR / People' },
+  { id: 'finance', label: 'Finance / Accounting' },
+  { id: 'marketing-comms', label: 'Marketing / Communications' },
+  { id: 'sales-bizdev', label: 'Sales / Business Development' },
+  { id: 'operations', label: 'Operations' },
+  { id: 'customer-support', label: 'Customer Support / Service' },
+  { id: 'other', label: 'Other / Not listed' }
+];
+
+// R9's four functional-visibility tags (backlog SS1.4.12): which
+// organizational vantage point can answer a given item with real evidence --
+// orthogonal to respondent role (ROLE_OPTIONS above). 'strategic' per R9's
+// own naming decision, replacing the original working name "enterprise-wide"
+// specifically to avoid colliding with SCOPE_OPTIONS' 'org' value. Not yet
+// wired into BASE_QUESTIONS/NONPROFIT_QUESTIONS/YOUTH_QUESTIONS as a per-item
+// field -- that's B8/B9's job once this exists. See
+// getVisibilityTagsForDepartment() in logic.js for the department -> tag
+// inference this taxonomy feeds.
+export const VISIBILITY_TAGS = ['strategic', 'operational', 'technical-build', 'legal-compliance'];
+
 // Industry list. Not all industries get overlays. Those that don't get honest scoping banner.
 export const INDUSTRIES = [
   { id: 'nonprofit-social', label: 'Nonprofit / Social services' },

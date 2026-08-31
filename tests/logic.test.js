@@ -16,9 +16,10 @@ import {
   applyScopeFraming,
   describeRole,
   roleVisibilityCaveat,
-  applyRoleFraming
+  applyRoleFraming,
+  getVisibilityTagsForDepartment
 } from '../src/logic.js';
-import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS } from '../src/data.js';
+import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS } from '../src/data.js';
 
 describe('computeTier', () => {
   it('classifies a score of exactly 70 as low risk (lower boundary of the low tier)', () => {
@@ -718,5 +719,84 @@ describe('applyRoleFraming', () => {
     const scoped = applyScopeFraming(baseRecs, { id: 'org', name: '' });
     const result = applyRoleFraming(scoped, { id: 'employee' }, { id: 'org' });
     expect(result[0].body).toContain('individual employee');
+  });
+});
+
+describe('getVisibilityTagsForDepartment (B4)', () => {
+  it('grants every recognized department at least operational visibility', () => {
+    DEPARTMENTS.forEach(function(d) {
+      expect(getVisibilityTagsForDepartment(d.id)).toContain('operational');
+    });
+  });
+
+  it('grants strategic visibility only to the executive department', () => {
+    expect(getVisibilityTagsForDepartment('executive')).toContain('strategic');
+    DEPARTMENTS.filter(function(d) { return d.id !== 'executive'; }).forEach(function(d) {
+      expect(getVisibilityTagsForDepartment(d.id)).not.toContain('strategic');
+    });
+  });
+
+  it('grants technical-build visibility only to the IT/engineering department', () => {
+    expect(getVisibilityTagsForDepartment('it-engineering')).toContain('technical-build');
+    DEPARTMENTS.filter(function(d) { return d.id !== 'it-engineering'; }).forEach(function(d) {
+      expect(getVisibilityTagsForDepartment(d.id)).not.toContain('technical-build');
+    });
+  });
+
+  it('grants legal-compliance visibility only to the legal department', () => {
+    expect(getVisibilityTagsForDepartment('legal')).toContain('legal-compliance');
+    DEPARTMENTS.filter(function(d) { return d.id !== 'legal'; }).forEach(function(d) {
+      expect(getVisibilityTagsForDepartment(d.id)).not.toContain('legal-compliance');
+    });
+  });
+
+  it('every returned tag is a real VISIBILITY_TAGS value for every recognized department', () => {
+    DEPARTMENTS.forEach(function(d) {
+      getVisibilityTagsForDepartment(d.id).forEach(function(tag) {
+        expect(VISIBILITY_TAGS).toContain(tag);
+      });
+    });
+  });
+
+  it('falls back to operational-only for an unrecognized department id', () => {
+    expect(getVisibilityTagsForDepartment('not-a-real-department')).toEqual(['operational']);
+  });
+
+  it('falls back to operational-only for a missing department id', () => {
+    expect(getVisibilityTagsForDepartment(undefined)).toEqual(['operational']);
+    expect(getVisibilityTagsForDepartment(null)).toEqual(['operational']);
+    expect(getVisibilityTagsForDepartment('')).toEqual(['operational']);
+  });
+
+  it('does not mutate its internal map across repeated calls', () => {
+    const first = getVisibilityTagsForDepartment('executive');
+    first.push('operational'); // caller mutating the returned array should not corrupt future calls
+    const second = getVisibilityTagsForDepartment('executive');
+    expect(second).toEqual(['strategic', 'operational']);
+  });
+});
+
+describe('DEPARTMENTS and VISIBILITY_TAGS data integrity (B4)', () => {
+  it('has no duplicate department ids', () => {
+    const ids = DEPARTMENTS.map(function(d) { return d.id; });
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('has no duplicate visibility tags', () => {
+    expect(new Set(VISIBILITY_TAGS).size).toBe(VISIBILITY_TAGS.length);
+  });
+
+  it('does not let any department id collide with a SCOPE_OPTIONS or ROLE_OPTIONS id', () => {
+    const reservedIds = ['org', 'department', 'initiative', 'leadership', 'dept-role', 'employee'];
+    DEPARTMENTS.forEach(function(d) {
+      expect(reservedIds).not.toContain(d.id);
+    });
+  });
+
+  it('does not let any visibility tag collide with a SCOPE_OPTIONS or ROLE_OPTIONS id', () => {
+    const reservedIds = ['org', 'department', 'initiative', 'leadership', 'dept-role', 'employee'];
+    VISIBILITY_TAGS.forEach(function(tag) {
+      expect(reservedIds).not.toContain(tag);
+    });
   });
 });
