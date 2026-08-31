@@ -82,7 +82,7 @@ export const ROLE_OPTIONS = [
   { id: 'leadership', label: 'Leadership / executive',
     tagline: 'CEO, board member, or other role with org-wide visibility and accountability.',
     hasDepartmentField: false },
-  { id: 'dept-role', label: 'Department / function',
+  { id: 'dept-role', label: 'Department member',
     tagline: 'You work within one department or function and are answering from that vantage point.',
     hasDepartmentField: false },
   { id: 'employee', label: 'Individual employee',
