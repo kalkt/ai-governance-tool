@@ -3,6 +3,7 @@ import {
   computeTier,
   computeScores,
   identifyGaps,
+  identifyCriticalGaps,
   buildRecommendations,
   getApplicableModules,
   getQuestionsForAssessment,
@@ -448,6 +449,132 @@ describe('buildRecommendations', () => {
     const gaps = [{ fn: 'govern', module: 'base', v: 0, priority: 'high', q: { id: 'np1', module: 'nonprofit' } }];
     const recs = buildRecommendations(gaps);
     expect(recs[0].module).toBe('nonprofit');
+  });
+});
+
+describe('identifyCriticalGaps (B7)', () => {
+  // Mirrors the exact B5 gating fixtures (computeScores describe block above)
+  // rather than inventing new ones, per this item's own instruction --
+  // identifyCriticalGaps is required to reuse B5's exact gating condition.
+  function scoresWithOwnershipPct(pct) {
+    const questions = [{ id: 'oa1', fn: 'govern', dimension: 'ownership-accountability' }];
+    // pct as an exact 0-3-over-3 answer isn't always representable; the tests
+    // below use the same 25/33-question fixtures as B5's own boundary tests
+    // where an exact percentage is required. This helper only covers the
+    // clean 0/100 cases.
+    const answers = { oa1: pct >= 100 ? 3 : 0 };
+    return computeScores(questions, answers);
+  }
+
+  it('returns an empty array when Ownership & Accountability is not bottom-tier', () => {
+    const scores = scoresWithOwnershipPct(100);
+    expect(identifyCriticalGaps(scores)).toEqual([]);
+  });
+
+  it('returns a single critical entry when Ownership & Accountability is bottom-tier (0%)', () => {
+    const scores = scoresWithOwnershipPct(0);
+    const result = identifyCriticalGaps(scores);
+    expect(result).toHaveLength(1);
+    expect(result[0].priority).toBe('critical');
+  });
+
+  it('returns an empty array when Ownership & Accountability has no answered questions at all (dimensionPct is null)', () => {
+    // Same guard B5's own gating rule uses -- no evidence to gate on.
+    const scores = computeScores([{ id: 'ce1', fn: 'govern', dimension: 'controls-evidence' }], { ce1: 0 });
+    expect(scores.dimensionPct['ownership-accountability']).toBeNull();
+    expect(identifyCriticalGaps(scores)).toEqual([]);
+  });
+
+  it('fires at exactly the same boundary as B5\'s gating rule (39% critical, 40% not)', () => {
+    // Reuses the exact 25-question/29-sum fixture from B5's own 39%-boundary
+    // gating test (computeScores describe block above).
+    const oaQuestions = Array.from({ length: 25 }, function(_, i) {
+      return { id: 'oa' + i, fn: 'govern', dimension: 'ownership-accountability' };
+    });
+    const answers39 = {};
+    oaQuestions.forEach(function(q, i) { answers39[q.id] = i < 9 ? 3 : (i === 9 ? 2 : 0); }); // sum 29/75 = 39%
+    const scores39 = computeScores(oaQuestions, answers39);
+    expect(scores39.dimensionPct['ownership-accountability']).toBe(39);
+    expect(identifyCriticalGaps(scores39)).toHaveLength(1);
+
+    // 5 questions, sum 6/15 = exactly 40% -- same fixture as B5's 40%-boundary test.
+    const boundaryQuestions = Array.from({ length: 5 }, function(_, i) {
+      return { id: 'oa' + i, fn: 'govern', dimension: 'ownership-accountability' };
+    });
+    const answers40 = { oa0: 2, oa1: 1, oa2: 1, oa3: 1, oa4: 1 }; // sum 6/15 = 40%
+    const scores40 = computeScores(boundaryQuestions, answers40);
+    expect(scores40.dimensionPct['ownership-accountability']).toBe(40);
+    expect(identifyCriticalGaps(scores40)).toEqual([]);
+  });
+
+  it('has a title and body distinct from g2\'s own question-level recommendation copy', () => {
+    // g2 ("Name an accountable owner for AI risk") and the critical entry are
+    // different signals that can co-occur -- their copy must read as clearly
+    // different findings, not a duplicate of the same text.
+    const scores = scoresWithOwnershipPct(0);
+    const result = identifyCriticalGaps(scores);
+    expect(result[0].title).not.toBe(REC_TITLES.g2);
+    expect(result[0].body).not.toBe(REC_BODIES.g2);
+    expect(typeof result[0].title).toBe('string');
+    expect(result[0].title.length).toBeGreaterThan(0);
+    expect(result[0].body.length).toBeGreaterThan(20);
+  });
+
+  it('produces a rec-shaped object with the same fields buildRecommendations produces', () => {
+    const scores = scoresWithOwnershipPct(0);
+    const result = identifyCriticalGaps(scores);
+    expect(Object.keys(result[0]).sort()).toEqual(['body', 'fn', 'module', 'priority', 'title']);
+  });
+});
+
+describe('composing critical and question-level recommendations (B7)', () => {
+  it('places the critical entry first, ahead of every high- and medium-priority recommendation', () => {
+    const scores = computeScores(
+      [{ id: 'oa1', fn: 'govern', dimension: 'ownership-accountability' }],
+      { oa1: 0 }
+    );
+    const gaps = [
+      { fn: 'govern', v: 1, priority: 'medium', q: { id: 'g1', module: 'base' } },
+      { fn: 'map', v: 0, priority: 'high', q: { id: 'm1', module: 'base' } }
+    ];
+    const recs = identifyCriticalGaps(scores).concat(buildRecommendations(gaps));
+    expect(recs.map(function(r) { return r.priority; })).toEqual(['critical', 'high', 'medium']);
+  });
+
+  it('surfaces an independent question-level gap alongside a critical entry rather than suppressing it', () => {
+    // g5 (ownership-accountability, comprehensive depth) scoring low is a
+    // real, independent question-level gap even when the dimension AVERAGE
+    // (g2+g5+np2) also happens to be bottom-tier -- both signals are real and
+    // both must appear, not deduped into one.
+    const scores = computeScores(
+      [
+        { id: 'g2', fn: 'govern', dimension: 'ownership-accountability' },
+        { id: 'g5', fn: 'govern', dimension: 'ownership-accountability' }
+      ],
+      { g2: 0, g5: 0 }
+    );
+    const gaps = identifyGaps(
+      [
+        { id: 'g2', fn: 'govern', module: 'base' },
+        { id: 'g5', fn: 'govern', module: 'base' }
+      ],
+      { g2: 0, g5: 0 }
+    );
+    const recs = identifyCriticalGaps(scores).concat(buildRecommendations(gaps));
+    const questionIds = gaps.map(function(g) { return g.q.id; });
+    expect(questionIds).toContain('g5');
+    expect(recs.some(function(r) { return r.priority === 'critical'; })).toBe(true);
+    expect(recs.some(function(r) { return r.title === REC_TITLES.g5; })).toBe(true);
+  });
+
+  it('returns no critical entry (only question-level recs) when Ownership & Accountability is not bottom-tier', () => {
+    const scores = computeScores(
+      [{ id: 'oa1', fn: 'govern', dimension: 'ownership-accountability' }],
+      { oa1: 3 }
+    );
+    const gaps = [{ fn: 'map', v: 0, priority: 'high', q: { id: 'm1', module: 'base' } }];
+    const recs = identifyCriticalGaps(scores).concat(buildRecommendations(gaps));
+    expect(recs.map(function(r) { return r.priority; })).toEqual(['high']);
   });
 });
 

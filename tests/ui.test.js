@@ -704,6 +704,21 @@ describe('renderReport: remaining branches', () => {
     expect(html).toContain('Some Unlisted Tool');
   });
 
+  it('renders the critical entry first with its own badge, and includes it in the "close critical gaps" roadmap phase (B7)', () => {
+    primeReportState(); // all quick-depth answers are 0, including g2 (ownership-accountability) -> bottom-tier
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    const recTitles = Array.from(document.querySelectorAll('.rec-title')).map(function(el) { return el.textContent; });
+    expect(recTitles[0]).toBe('Establish real ownership for AI governance, organization-wide');
+    const firstBadge = document.querySelector('.rec-head span');
+    expect(firstBadge.textContent).toBe('Critical');
+    expect(firstBadge.classList.contains('prio-critical')).toBe(true);
+    expect(html).toContain('Close critical gaps');
+    // The critical entry's own title should appear inside the "Next 90 days" phase list.
+    const phaseLists = document.querySelectorAll('.phase ul');
+    expect(phaseLists[0].textContent).toContain('Establish real ownership for AI governance, organization-wide');
+  });
+
   it('shows the industry-overlay caveat for an in-scope industry', () => {
     primeReportState();
     state.profile.industry = 'healthcare';
@@ -720,11 +735,12 @@ describe('renderReport: remaining branches', () => {
     expect(document.querySelectorAll('.gap-badge.overconfident').length).toBeGreaterThan(0);
   });
 
-  it('shows the strong-foundations message when there are no gaps', () => {
+  it('shows the strong-foundations message when there are no gaps, and no critical entry when ownership is not bottom-tier', () => {
     primeReportState();
     state.questions.forEach(function(q) { state.answers[q.id] = 3; }); // best answer everywhere
     renderReport();
     expect(document.getElementById('stage-report').innerHTML).toContain('You have strong foundations');
+    expect(document.querySelectorAll('.prio-critical').length).toBe(0);
   });
 
   it('populates the "3 to 6 months" roadmap phase when medium-priority gaps exist', () => {

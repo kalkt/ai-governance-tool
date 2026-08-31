@@ -34,6 +34,7 @@ import {
   computeScores,
   computeTier,
   identifyGaps,
+  identifyCriticalGaps,
   buildRecommendations,
   classifyToolsInUse,
   filterToolsForProfile,
@@ -757,7 +758,15 @@ export function renderReport() {
   var scores = computeScores(state.questions, state.answers);
   var tier = computeTier(scores.overall);
   var gaps = identifyGaps(state.questions, state.answers);
-  var recs = applyRoleFraming(applyScopeFraming(buildRecommendations(gaps), state.scope), state.role, state.scope).slice(0, 8);
+  // Critical (B7): a dimension-level finding, not scope/role-framed like the
+  // question-level recs below -- Ownership & Accountability's own definition
+  // is inherently org-wide, so it doesn't carry a per-scope/per-role caveat
+  // the way an individual question's recommendation does. Always placed
+  // first, ahead of every 'high' question-level gap, per B7's own spec.
+  var criticalGaps = identifyCriticalGaps(scores);
+  var recs = criticalGaps.concat(
+    applyRoleFraming(applyScopeFraming(buildRecommendations(gaps), state.scope), state.role, state.scope)
+  ).slice(0, 8);
   var toolAnalysis = classifyToolsInUse(state.toolsSelected, state.otherTools);
   var modules = getApplicableModules(state.profile);
   var confidenceGap = computeConfidenceGap(scores, state.confidenceAnswers);
@@ -841,8 +850,8 @@ export function renderReport() {
   html += '<div class="section"><h2>Prioritized recommendations</h2>' +
     (recs.length === 0 ? '<div class="callout">You have strong foundations. Lock in a quarterly review to keep governance current.</div>' :
     recs.map(function(r) {
-      var cls = r.priority === 'high' ? 'prio-high' : (r.priority === 'medium' ? 'prio-med' : 'prio-low');
-      var plabel = r.priority === 'high' ? 'High priority' : (r.priority === 'medium' ? 'Medium priority' : 'Maintain');
+      var cls = r.priority === 'critical' ? 'prio-critical' : (r.priority === 'high' ? 'prio-high' : (r.priority === 'medium' ? 'prio-med' : 'prio-low'));
+      var plabel = r.priority === 'critical' ? 'Critical' : (r.priority === 'high' ? 'High priority' : (r.priority === 'medium' ? 'Medium priority' : 'Maintain'));
       var moduleTag = r.module !== 'base' ? ' • ' + (r.module === 'nonprofit' ? 'Nonprofit module' : 'Youth-serving module') : '';
       return '<div class="rec"><div class="rec-head"><p class="rec-title">' + r.title + '</p>' +
         '<span class="' + cls + '">' + plabel + '</span></div>' +
@@ -850,8 +859,11 @@ export function renderReport() {
         '<p class="rec-body">' + r.body + '</p></div>';
     }).join('')) + '</div>';
 
-  // Roadmap
-  var high = recs.filter(function(r) { return r.priority === 'high'; }).slice(0, 3);
+  // Roadmap. "Close critical gaps" (Next 90 days) includes both the new B7
+  // critical-priority entry and question-level high-priority gaps -- recs is
+  // already critical-first (see above), so slice(0,3) naturally keeps a
+  // critical entry in this phase rather than getting displaced by highs.
+  var high = recs.filter(function(r) { return r.priority === 'critical' || r.priority === 'high'; }).slice(0, 3);
   var med = recs.filter(function(r) { return r.priority === 'medium'; }).slice(0, 3);
   html += '<div class="section"><h2>Maturity roadmap</h2><div class="roadmap">' +
     '<div class="phase"><p class="plabel">Next 90 days</p><h4>Close critical gaps</h4><ul>' +

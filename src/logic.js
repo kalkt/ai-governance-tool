@@ -168,6 +168,42 @@ export function identifyGaps(questions, answers) {
   return gaps;
 }
 
+// Critical-severity, DIMENSION-level finding (B7, backlog SS1.4.5 / B5's own
+// "Where B7 hooks in" note). Reuses B5's exact gating condition --
+// GOVERNANCE_GATING_THRESHOLD and dimensionPct['ownership-accountability'] --
+// rather than defining a second threshold, per R2's finding that a
+// bottom-tier Ownership & Accountability score independently qualifies as a
+// critical gap regardless of the other four dimensions.
+//
+// Takes computeScores()'s return value, not raw answers -- this operates at
+// the dimension level. identifyGaps() above stays question-level and is
+// unchanged. The two are genuinely different signals that can and normally
+// do fire independently, not duplicates to be deduped: dimensionPct['ownership
+// -accountability'] is an AVERAGE across every answered ownership-
+// accountability question (g2, g5, np2 depending on depth/module), not the
+// same thing as "g2 specifically scored low." A comprehensive-depth org could
+// have g2 fine but g5 bad, dragging the dimension below threshold even though
+// g2 itself never appears in identifyGaps' output -- both findings are real
+// and both should surface.
+//
+// Returns a rec-shaped object directly (priority/fn/module/title/body, same
+// shape buildRecommendations() produces), not a gap-shaped one -- there is no
+// single question id to key a title/body lookup off of (REC_TITLES/
+// REC_BODIES), since this describes a structural/dimension-level finding, not
+// one missed question. Title/body below are newly authored copy for this
+// item, not a fact being verified -- flagged as such in the backlog.
+export function identifyCriticalGaps(scores) {
+  var oaPct = scores.dimensionPct['ownership-accountability'];
+  if (oaPct === null || oaPct >= GOVERNANCE_GATING_THRESHOLD) return [];
+  return [{
+    priority: 'critical',
+    fn: 'govern',
+    module: 'base',
+    title: 'Establish real ownership for AI governance, organization-wide',
+    body: 'Your Ownership & Accountability responses average in the bottom tier -- not one missed question, but a pattern across everything this tool asked about who owns AI governance. This is structural, not incidental: a CSA whitepaper found 73% of organizations report internal conflict over AI governance ownership, and 96% of CISOs handed the responsibility get it without real authority to act. Every other recommendation in this report assumes someone is actually accountable for acting on it -- until a specific, named owner exists with documented authority, closing individual gaps elsewhere will not hold.'
+  }];
+}
+
 export function buildRecommendations(gaps) {
   var seen = {};
   var recs = [];
