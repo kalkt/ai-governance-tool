@@ -55,17 +55,48 @@ that drops under that line.
   regulatory finding, or legal case referenced in a `TOOL_MASTER_LIST` entry.
 - Check for an existing/duplicate entry before adding a new one (see above).
 
-⚠️ **Ask first**
+✅ **Decide and document, standing authorization (2026-08-31, Kartik):**
+Ordinary product/UX/implementation judgment calls that come up mid-task —
+list lengths and other capacity tradeoffs, copy tone/wording within the
+project's already-established voice, which existing function vs. a new one
+to put some logic in, small UI-behavior tradeoffs, which of several
+reasonable data-structure shapes to use for something with no real
+migration cost — get decided by whoever is doing the work, not escalated.
+Write the reasoning into the backlog entry for that item, the same way
+B4's `DEPARTMENTS` list and B7's slice-of-8 call were documented, so
+Kartik can review and overrule after the fact rather than gating on it
+beforehand. This is the default now; do not stop a run to ask about this
+class of decision.
+
+A batch of Build items authorized in one prompt should be worked through
+in one continuous run — don't stop and report back between items unless
+something below actually requires it.
+
+⚠️ **Ask first / stop and report instead of deciding**
 - Adding a new `TOOL_MASTER_LIST` category, or changing the scoring/tiering
-  logic in `src/logic.js` (`computeScores`, `computeTier`, `GAP_THRESHOLD`).
+  logic in `src/logic.js` (`computeScores`, `computeTier`, `GAP_THRESHOLD`,
+  `GOVERNANCE_DIMENSIONS`/weights, `GOVERNANCE_GATING_THRESHOLD`) beyond
+  what a specific, already-authorized Build item's own scope calls for.
 - Starting any numbered Build item (B1–B25+ in the backlog) not already
-  explicitly authorized by Kartik in this conversation.
-- Any visual/UI redesign decision — colors, typography, layout — that isn't
-  already specified in `ai-governance-tool-backlog.md`.
-- Committing/pushing when something genuinely went wrong or is ambiguous
-  (tests fail, coverage drops below the 90% gate, a real design judgment
-  call came up that isn't resolved by this file or the backlog, scope crept
-  past what was authorized) — stop and report instead of pushing through.
+  explicitly authorized — whether that's one item or a batch of several
+  named in the same prompt.
+- Anything that would be genuinely costly or awkward to reverse later —
+  a real schema/migration decision (not §1.4.13's forward-only design
+  doc, an actual persisted-data shape once a backend exists), renaming or
+  removing something other code already depends on, a decision that
+  would require re-authoring already-shipped question/recommendation
+  content if reversed.
+- Anything touching factual, regulatory, or legal accuracy — this stays a
+  human checkpoint regardless of the decide-and-document rule above,
+  because this tool is a live job-search portfolio piece a real
+  interviewer might scrutinize (see the backlog's own §1.1). Citations,
+  classifications, and claims about what a law/framework actually
+  requires are never a "decide and document" call.
+- Test failures, a coverage drop below the 90% gate, or a build/e2e
+  failure that isn't cleanly fixable within the item's own scope.
+- Whether to build something not already a committed Build item in the
+  backlog (e.g. B16b is explicitly optional/not-yet-actioned) — that's a
+  scope decision, distinct from how to build something already committed.
 
 ✅ **Commit and push, standing authorization (2026-08-31, Kartik):**
 When a task's deliverables are done cleanly — `npm test` passes, coverage
