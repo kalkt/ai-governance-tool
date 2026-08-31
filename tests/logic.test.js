@@ -8,7 +8,12 @@ import {
   getQuestionsForAssessment,
   classifyToolsInUse,
   filterToolsForProfile,
-  hasIndustryOverlay
+  hasIndustryOverlay,
+  computeConfidenceGap,
+  GAP_THRESHOLD,
+  scopeSubject,
+  describeScope,
+  applyScopeFraming
 } from '../src/logic.js';
 import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS } from '../src/data.js';
 
@@ -425,5 +430,185 @@ describe('hasIndustryOverlay', () => {
 
   it('returns false when called with no argument at all', () => {
     expect(hasIndustryOverlay()).toBe(false);
+  });
+});
+
+describe('computeConfidenceGap', () => {
+  // Two questions per function so evidence percentages land on clean numbers (0/50/100).
+  const questions = [
+    { id: 'g1', fn: 'govern' }, { id: 'g2', fn: 'govern' },
+    { id: 'm1', fn: 'map' }, { id: 'm2', fn: 'map' },
+    { id: 'me1', fn: 'measure' }, { id: 'me2', fn: 'measure' },
+    { id: 'ma1', fn: 'manage' }, { id: 'ma2', fn: 'manage' }
+  ];
+
+  it('flags overconfident when self-reported confidence exceeds evidence by at least GAP_THRESHOLD', () => {
+    // govern evidence: 0/6 = 0%. confidence: 5 -> (5-1)/4*100 = 100%. gap = 100, well over threshold.
+    const scores = computeScores(questions, { g1: 0, g2: 0 });
+    const result = computeConfidenceGap(scores, { govern: 5 });
+    expect(result.govern.evidencePct).toBe(0);
+    expect(result.govern.confidencePct).toBe(100);
+    expect(result.govern.gap).toBe(100);
+    expect(result.govern.status).toBe('overconfident');
+  });
+
+  it('flags underconfident when evidence exceeds self-reported confidence by at least GAP_THRESHOLD', () => {
+    // map evidence: 6/6 = 100%. confidence: 1 -> 0%. gap = -100.
+    const scores = computeScores(questions, { m1: 3, m2: 3 });
+    const result = computeConfidenceGap(scores, { map: 1 });
+    expect(result.map.evidencePct).toBe(100);
+    expect(result.map.confidencePct).toBe(0);
+    expect(result.map.gap).toBe(-100);
+    expect(result.map.status).toBe('underconfident');
+  });
+
+  it('treats a gap within GAP_THRESHOLD as aligned', () => {
+    // measure evidence: 3/6 = 50%. confidence: 3 -> 50%. gap = 0.
+    const scores = computeScores(questions, { me1: 3, me2: 0 });
+    const result = computeConfidenceGap(scores, { measure: 3 });
+    expect(result.measure.evidencePct).toBe(50);
+    expect(result.measure.confidencePct).toBe(50);
+    expect(result.measure.gap).toBe(0);
+    expect(result.measure.status).toBe('aligned');
+  });
+
+  it('treats a gap just under GAP_THRESHOLD as aligned, not overconfident', () => {
+    const boundaryScores = { fnScores: { govern: { sum: 0, max: 0 }, map: { sum: 0, max: 0 }, measure: { sum: 0, max: 0 }, manage: { sum: 60, max: 100 } } };
+    const result = computeConfidenceGap(boundaryScores, { manage: 4 }); // confidence 75%, evidence 60%, gap = 15
+    expect(result.manage.gap).toBe(15);
+    expect(result.manage.status).toBe('aligned');
+  });
+
+  it('treats a gap of exactly +GAP_THRESHOLD as overconfident (inclusive boundary)', () => {
+    // evidence 55%, confidence 75% (v=4) -> gap = 20 = GAP_THRESHOLD exactly.
+    const scores = { fnScores: { govern: { sum: 0, max: 0 }, map: { sum: 0, max: 0 }, measure: { sum: 0, max: 0 }, manage: { sum: 55, max: 100 } } };
+    const result = computeConfidenceGap(scores, { manage: 4 });
+    expect(result.manage.evidencePct).toBe(55);
+    expect(result.manage.confidencePct).toBe(75);
+    expect(result.manage.gap).toBe(GAP_THRESHOLD);
+    expect(result.manage.status).toBe('overconfident');
+  });
+
+  it('treats a gap of exactly -GAP_THRESHOLD as underconfident (inclusive boundary)', () => {
+    // evidence 70%, confidence 50% (v=3) -> gap = -20 = -GAP_THRESHOLD exactly.
+    const scores = { fnScores: { govern: { sum: 0, max: 0 }, map: { sum: 0, max: 0 }, measure: { sum: 0, max: 0 }, manage: { sum: 70, max: 100 } } };
+    const result = computeConfidenceGap(scores, { manage: 3 });
+    expect(result.manage.evidencePct).toBe(70);
+    expect(result.manage.confidencePct).toBe(50);
+    expect(result.manage.gap).toBe(-GAP_THRESHOLD);
+    expect(result.manage.status).toBe('underconfident');
+  });
+
+  it('returns status "unknown" with a null confidencePct when a function has no self-reported answer', () => {
+    const scores = computeScores(questions, { g1: 2, g2: 2 });
+    const result = computeConfidenceGap(scores, {}); // no confidence answers at all
+    expect(result.govern.confidencePct).toBeNull();
+    expect(result.govern.gap).toBeNull();
+    expect(result.govern.status).toBe('unknown');
+  });
+
+  it('always returns all four NIST functions, even ones with no evidence questions answered', () => {
+    const scores = computeScores(questions, {});
+    const result = computeConfidenceGap(scores, { govern: 3, map: 3, measure: 3, manage: 3 });
+    expect(Object.keys(result).sort()).toEqual(['govern', 'manage', 'map', 'measure']);
+  });
+});
+
+
+describe('scopeSubject', () => {
+  it('returns "your department" for department scope', () => {
+    expect(scopeSubject('department')).toBe('your department');
+  });
+
+  it('returns "this initiative" for initiative scope', () => {
+    expect(scopeSubject('initiative')).toBe('this initiative');
+  });
+
+  it('returns "your organization" for org scope', () => {
+    expect(scopeSubject('org')).toBe('your organization');
+  });
+
+  it('defaults to "your organization" for an unrecognized or missing scope id', () => {
+    expect(scopeSubject(undefined)).toBe('your organization');
+    expect(scopeSubject('something-else')).toBe('your organization');
+  });
+});
+
+describe('describeScope', () => {
+  it('describes a null/missing scope as whole organization', () => {
+    expect(describeScope(null)).toBe('Whole organization');
+    expect(describeScope({})).toBe('Whole organization');
+  });
+
+  it('describes org scope as whole organization regardless of a stray name', () => {
+    expect(describeScope({ id: 'org', name: 'Marketing' })).toBe('Whole organization');
+  });
+
+  it('describes a named department scope', () => {
+    expect(describeScope({ id: 'department', name: 'Marketing' })).toBe('Marketing department');
+  });
+
+  it('describes an unnamed department scope', () => {
+    expect(describeScope({ id: 'department', name: '' })).toBe('A specific department (unnamed)');
+    expect(describeScope({ id: 'department', name: '   ' })).toBe('A specific department (unnamed)');
+  });
+
+  it('describes a named initiative scope', () => {
+    expect(describeScope({ id: 'initiative', name: 'Customer-support chatbot' })).toBe('Customer-support chatbot (AI initiative)');
+  });
+
+  it('describes an unnamed initiative scope', () => {
+    expect(describeScope({ id: 'initiative', name: undefined })).toBe('A specific AI initiative (unnamed)');
+  });
+});
+
+describe('applyScopeFraming', () => {
+  const baseRecs = [
+    { priority: 'high', fn: 'govern', module: 'base', title: 'Write a basic AI use policy', body: 'No baseline in place today.' }
+  ];
+
+  it('returns the same recs unchanged for org scope', () => {
+    const result = applyScopeFraming(baseRecs, { id: 'org', name: '' });
+    expect(result).toEqual(baseRecs);
+  });
+
+  it('returns the same recs unchanged when scope is missing entirely', () => {
+    expect(applyScopeFraming(baseRecs, null)).toEqual(baseRecs);
+    expect(applyScopeFraming(baseRecs, undefined)).toEqual(baseRecs);
+  });
+
+  it('appends a department-scoped note without mutating the original recs', () => {
+    const result = applyScopeFraming(baseRecs, { id: 'department', name: 'Marketing' });
+    expect(result[0].body).toContain('Scoped to Marketing');
+    expect(result[0].body).toContain('Organization-wide AI governance may already exist above this level');
+    expect(baseRecs[0].body).toBe('No baseline in place today.'); // original untouched
+  });
+
+  it('falls back to a generic department name when none is given', () => {
+    const result = applyScopeFraming(baseRecs, { id: 'department', name: '' });
+    expect(result[0].body).toContain('Scoped to this department');
+  });
+
+  it('appends an initiative-scoped note framed as a pre-deployment review', () => {
+    const result = applyScopeFraming(baseRecs, { id: 'initiative', name: 'Customer-support chatbot' });
+    expect(result[0].body).toContain('Scoped to Customer-support chatbot');
+    expect(result[0].body).toContain('pre-deployment review');
+  });
+
+  it('falls back to a generic initiative name when none is given', () => {
+    const result = applyScopeFraming(baseRecs, { id: 'initiative', name: null });
+    expect(result[0].body).toContain('Scoped to this AI initiative');
+  });
+
+  it('preserves every other field on each recommendation unchanged', () => {
+    const result = applyScopeFraming(baseRecs, { id: 'department', name: 'Ops' });
+    expect(result[0].priority).toBe(baseRecs[0].priority);
+    expect(result[0].fn).toBe(baseRecs[0].fn);
+    expect(result[0].module).toBe(baseRecs[0].module);
+    expect(result[0].title).toBe(baseRecs[0].title);
+  });
+
+  it('handles an empty recs array', () => {
+    expect(applyScopeFraming([], { id: 'department', name: 'Ops' })).toEqual([]);
   });
 });

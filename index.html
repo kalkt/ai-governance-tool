@@ -183,6 +183,26 @@
   .bar span { display: block; height: 100%; background: var(--accent); width: 0; transition: width 0.4s; }
   .fn-desc { font-size: 11px; color: var(--text-muted); margin: 6px 0 0; }
 
+  /* Confidence (Likert) step and perception-vs-evidence report section */
+  .likert-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+  .likert-fn-label { font-size: 11px; font-weight: 600; color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.03em; margin: 0 0 6px; }
+  .likert-text { font-size: 15px; font-weight: 500; margin: 0 0 12px; }
+  .likert-row { display: flex; gap: 6px; }
+  .likert-opt { flex: 1; text-align: center; padding: 8px 4px; border: 0.5px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+  .likert-opt:hover { border-color: var(--border-strong); }
+  .likert-opt.selected { border: 2px solid var(--accent); padding: calc(8px - 1.5px) calc(4px - 1.5px); background: var(--accent-bg); }
+  .likert-opt input { display: none; }
+  .likert-v { display: block; font-size: 15px; font-weight: 600; color: var(--text); }
+  .likert-opt-label { display: block; font-size: 10px; color: var(--text-muted); margin-top: 2px; line-height: 1.2; }
+  .gap-badge { font-size: 10px; padding: 1px 8px; border-radius: var(--radius); font-weight: 500; }
+  .gap-badge.overconfident { background: var(--warning-bg); color: var(--warning-text); }
+  .gap-badge.underconfident { background: var(--accent-bg); color: var(--accent-text); }
+  .gap-badge.aligned { background: var(--success-bg); color: var(--success-text); }
+  .fn-compare-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+  .fn-compare-row .bar { flex: 1; }
+  .fn-compare-row .bar.confidence span { background: var(--text-muted); }
+  .fn-compare-label { width: 64px; flex-shrink: 0; }
+
   .rec { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; }
   .rec-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
   .rec-title { font-size: 14px; font-weight: 500; margin: 0; }
@@ -223,10 +243,12 @@
 <div class="container">
   <div id="stepper" class="stepper hidden"></div>
   <div id="stage-intro"></div>
+  <div id="stage-scope" class="hidden"></div>
   <div id="stage-profile" class="hidden"></div>
   <div id="stage-tools" class="hidden"></div>
   <div id="stage-depth" class="hidden"></div>
   <div id="stage-quiz" class="hidden"></div>
+  <div id="stage-confidence" class="hidden"></div>
   <div id="stage-report" class="hidden"></div>
 </div>
 
@@ -234,7 +256,10 @@
 import {
   FRAMEWORK,
   INDUSTRIES,
-  TOOL_MASTER_LIST
+  TOOL_MASTER_LIST,
+  CONFIDENCE_QUESTIONS,
+  LIKERT_OPTIONS,
+  SCOPE_OPTIONS
 } from './src/data.js';
 import {
   getApplicableModules,
@@ -244,7 +269,11 @@ import {
   identifyGaps,
   buildRecommendations,
   classifyToolsInUse,
-  filterToolsForProfile
+  filterToolsForProfile,
+  computeConfidenceGap,
+  scopeSubject,
+  describeScope,
+  applyScopeFraming
 } from './src/logic.js';
 
 // ============================================================================
@@ -252,6 +281,7 @@ import {
 // ============================================================================
 
 var state = {
+  scope: { id: null, name: '' },  // v2 SS12.2 assessment scope selector
   profile: {
     orgType: null,          // 'nonprofit' | 'for-profit'
     servesYouth: null,      // true | false
@@ -267,7 +297,8 @@ var state = {
   depth: null,
   questions: [],
   answers: {},
-  idx: 0
+  idx: 0,
+  confidenceAnswers: {}     // self-reported Likert 1-5, keyed by NIST function id
 };
 
 // ============================================================================
@@ -276,7 +307,7 @@ var state = {
 
 function el(id) { return document.getElementById(id); }
 function hideAll() {
-  ['stage-intro','stage-profile','stage-tools','stage-depth','stage-quiz','stage-report'].forEach(function(s) {
+  ['stage-intro','stage-scope','stage-profile','stage-tools','stage-depth','stage-quiz','stage-confidence','stage-report'].forEach(function(s) {
     el(s).classList.add('hidden');
   });
 }
@@ -288,10 +319,12 @@ function show(stageId) {
 
 function renderStepper(currentStep) {
   var steps = [
+    { id: 'scope', label: 'Scope' },
     { id: 'profile', label: 'Profile' },
     { id: 'tools', label: 'Tools' },
     { id: 'depth', label: 'Depth' },
     { id: 'assess', label: 'Assessment' },
+    { id: 'confidence', label: 'Confidence' },
     { id: 'report', label: 'Report' }
   ];
   var stepper = el('stepper');
@@ -319,7 +352,65 @@ function renderIntro() {
       '<strong>What you get:</strong> A structured 15-30 minute assessment across four NIST functions (Govern, Map, Measure, Manage), plus additional modules that apply if your organization is a nonprofit or serves people under 18. Report includes a risk tier, gap map, prioritized recommendations, and an objective classification of AI tools you already use.' +
     '</div>' +
     '<div class="row" style="margin-top: 1rem;"><button id="btn-start" class="primary">Start</button></div>';
-  el('btn-start').addEventListener('click', renderProfile);
+  el('btn-start').addEventListener('click', renderScope);
+}
+
+function renderScope() {
+  show('stage-scope');
+  renderStepper('scope');
+  var s = state.scope;
+  var selectedOpt = SCOPE_OPTIONS.find(function(o) { return o.id === s.id; });
+
+  el('stage-scope').innerHTML = '' +
+    '<div class="hero">' +
+      '<p class="kicker">Step 1 of 5</p>' +
+      '<h1>What are you assessing?</h1>' +
+      '<p class="lede">Pick the scope before you start. A department lead answering for governance they cannot see (a policy Legal wrote but they have never seen, for example) produces a false finding \u2014 this keeps that from happening and shapes how your report is framed.</p>' +
+    '</div>' +
+
+    '<div class="choice-grid" id="scope-grid">' +
+      SCOPE_OPTIONS.map(function(o) {
+        return '<button class="choice' + (s.id === o.id ? ' selected' : '') + '" data-scope="' + o.id + '">' +
+          '<h3>' + o.label + '</h3>' +
+          '<p>' + o.tagline + '</p>' +
+        '</button>';
+      }).join('') +
+    '</div>' +
+
+    (selectedOpt && selectedOpt.nameLabel ?
+      '<div class="field-group" id="scope-name-group">' +
+        '<label class="field-label">' + selectedOpt.nameLabel + '</label>' +
+        '<input type="text" id="f-scope-name" value="' + escapeHtml(s.name || '') + '" placeholder="e.g. ' + (selectedOpt.id === 'department' ? 'Marketing' : 'Customer-support chatbot') + '" />' +
+      '</div>' : '') +
+
+    '<p id="err-scope" class="err hidden">Pick a scope to continue.</p>' +
+
+    '<div class="row" style="margin-top: 1rem;">' +
+      '<button id="btn-back-scope">Back</button>' +
+      '<div style="flex:1"></div>' +
+      '<button id="btn-next-scope" class="primary">Continue</button>' +
+    '</div>';
+
+  document.querySelectorAll('#scope-grid .choice').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      state.scope.id = btn.getAttribute('data-scope');
+      el('err-scope').classList.add('hidden');
+      renderScope();
+    });
+  });
+
+  if (el('f-scope-name')) {
+    el('f-scope-name').addEventListener('input', function(e) { state.scope.name = e.target.value; });
+  }
+
+  el('btn-back-scope').addEventListener('click', renderIntro);
+  el('btn-next-scope').addEventListener('click', function() {
+    if (!state.scope.id) {
+      el('err-scope').classList.remove('hidden');
+      return;
+    }
+    renderProfile();
+  });
 }
 
 function renderProfile() {
@@ -328,7 +419,7 @@ function renderProfile() {
   var p = state.profile;
   el('stage-profile').innerHTML = '' +
     '<div class="hero">' +
-      '<p class="kicker">Step 1 of 4</p>' +
+      '<p class="kicker">Step 2 of 5</p>' +
       '<h1>Tell us about your organization</h1>' +
       '<p class="lede">This tailors which questions apply and how recommendations are framed. All fields optional except organization type.</p>' +
     '</div>' +
@@ -432,7 +523,7 @@ function renderProfile() {
   attachCheckHandlers('regulated', state.profile.regulated);
   el('f-industry').addEventListener('change', function(e) { state.profile.industry = e.target.value || null; });
 
-  el('btn-back-intro').addEventListener('click', renderIntro);
+  el('btn-back-intro').addEventListener('click', renderScope);
   el('btn-next-profile').addEventListener('click', function() {
     if (state.profile.orgType === null || state.profile.servesYouth === null) {
       el('err-profile').classList.remove('hidden');
@@ -505,7 +596,7 @@ function renderTools() {
   var filteredTools = filterToolsForProfile(state.profile);
   el('stage-tools').innerHTML = '' +
     '<div class="hero">' +
-      '<p class="kicker">Step 2 of 4</p>' +
+      '<p class="kicker">Step 3 of 5</p>' +
       '<h1>Which AI tools does your team use?</h1>' +
       '<p class="lede">Select any tools currently in use. This is used to flag known-risky tools in your report and tailor recommendations. Skip if none apply.</p>' +
     '</div>' +
@@ -649,7 +740,7 @@ function renderDepth() {
 
   el('stage-depth').innerHTML = '' +
     '<div class="hero">' +
-      '<p class="kicker">Step 3 of 4</p>' +
+      '<p class="kicker">Step 4 of 5</p>' +
       '<h1>Pick your assessment depth</h1>' +
       '<p class="lede">All three depths return the same report structure.' + moduleText + '</p>' +
     '</div>' +
@@ -714,7 +805,13 @@ function renderQuestion() {
   var pct = Math.round((state.idx / total) * 100);
   var moduleLabel = q.module === 'nonprofit' ? 'Nonprofit module' : (q.module === 'youth' ? 'Youth-serving module' : FRAMEWORK.functions[q.fn].name);
 
+  var scopeBannerHtml = (state.scope.id && state.scope.id !== 'org') ?
+    '<div class="callout info" style="margin-bottom: 0.75rem;"><strong>Answering for:</strong> ' + describeScope(state.scope) + '. ' +
+    (state.scope.id === 'department' ? 'Answer based on what you can see at the department level \u2014 if you\'re not sure whether something exists above it, say so rather than guessing.' : 'Answer about this one system, not your organization\'s AI use in general.') +
+    '</div>' : '';
+
   el('stage-quiz').innerHTML = '' +
+    scopeBannerHtml +
     '<div class="qcard">' +
       '<div class="qhead">' +
         '<span>Question ' + (state.idx + 1) + ' of ' + total + '</span>' +
@@ -735,7 +832,7 @@ function renderQuestion() {
       '<div class="nav">' +
         '<button id="btn-back-q"' + (state.idx === 0 ? ' disabled' : '') + '>Back</button>' +
         '<span class="spacer"></span>' +
-        '<button id="btn-next-q" class="primary">' + (state.idx === total - 1 ? 'See report' : 'Next') + '</button>' +
+        '<button id="btn-next-q" class="primary">' + (state.idx === total - 1 ? 'Continue' : 'Next') + '</button>' +
       '</div>' +
     '</div>';
 
@@ -760,11 +857,74 @@ function renderQuestion() {
       return;
     }
     if (state.idx === state.questions.length - 1) {
-      renderReport();
+      renderConfidence();
     } else {
       state.idx++;
       renderQuestion();
     }
+  });
+}
+
+function renderConfidence() {
+  show('stage-confidence');
+  renderStepper('confidence');
+
+  el('stage-confidence').innerHTML = '' +
+    '<div class="hero">' +
+      '<p class="kicker">Last step</p>' +
+      '<h1>How prepared do you feel?</h1>' +
+      '<p class="lede">The questions you just answered are evidence-based -- they ask what you can document or point to. This part is different: it asks how prepared your organization FEELS, independent of the evidence. Answer honestly; there is no "correct" answer to select. Your report will show where perception and evidence agree or diverge.</p>' +
+    '</div>' +
+    CONFIDENCE_QUESTIONS.map(function(cq) {
+      var selected = state.confidenceAnswers[cq.fn];
+      var cqText = cq.text.replace('{subject}', scopeSubject(state.scope.id));
+      return '' +
+        '<div class="likert-card">' +
+          '<p class="likert-fn-label">' + FRAMEWORK.functions[cq.fn].name + '</p>' +
+          '<p class="likert-text">' + cqText + '</p>' +
+          '<div class="likert-row" data-fn="' + cq.fn + '">' +
+            LIKERT_OPTIONS.map(function(o) {
+              return '<label class="likert-opt' + (selected === o.v ? ' selected' : '') + '" data-v="' + o.v + '">' +
+                     '<input type="radio" name="likert-' + cq.fn + '" value="' + o.v + '"' + (selected === o.v ? ' checked' : '') + '>' +
+                     '<span class="likert-v">' + o.v + '</span>' +
+                     '<span class="likert-opt-label">' + o.label + '</span>' +
+                     '</label>';
+            }).join('') +
+          '</div>' +
+        '</div>';
+    }).join('') +
+    '<p class="err hidden" id="err-confidence">Answer all four before continuing.</p>' +
+    '<div class="row" style="margin-top: 1rem;">' +
+      '<button id="btn-back-confidence">Back</button>' +
+      '<div style="flex:1"></div>' +
+      '<button id="btn-see-report" class="primary">See report</button>' +
+    '</div>';
+
+  document.querySelectorAll('.likert-row').forEach(function(row) {
+    var fn = row.getAttribute('data-fn');
+    row.querySelectorAll('.likert-opt').forEach(function(opt) {
+      opt.addEventListener('click', function() {
+        var v = parseInt(opt.getAttribute('data-v'), 10);
+        state.confidenceAnswers[fn] = v;
+        row.querySelectorAll('.likert-opt').forEach(function(o) { o.classList.remove('selected'); });
+        opt.classList.add('selected');
+        opt.querySelector('input').checked = true;
+        el('err-confidence').classList.add('hidden');
+      });
+    });
+  });
+
+  el('btn-back-confidence').addEventListener('click', function() {
+    state.idx = state.questions.length - 1;
+    renderQuestion();
+  });
+  el('btn-see-report').addEventListener('click', function() {
+    var allAnswered = CONFIDENCE_QUESTIONS.every(function(cq) { return state.confidenceAnswers[cq.fn] !== undefined; });
+    if (!allAnswered) {
+      el('err-confidence').classList.remove('hidden');
+      return;
+    }
+    renderReport();
   });
 }
 
@@ -775,9 +935,10 @@ function renderReport() {
   var scores = computeScores(state.questions, state.answers);
   var tier = computeTier(scores.overall);
   var gaps = identifyGaps(state.questions, state.answers);
-  var recs = buildRecommendations(gaps).slice(0, 8);
+  var recs = applyScopeFraming(buildRecommendations(gaps), state.scope).slice(0, 8);
   var toolAnalysis = classifyToolsInUse(state.toolsSelected, state.otherTools);
   var modules = getApplicableModules(state.profile);
+  var confidenceGap = computeConfidenceGap(scores, state.confidenceAnswers);
 
   var highCount = gaps.filter(function(g) { return g.priority === 'high'; }).length;
   var medCount = gaps.filter(function(g) { return g.priority === 'medium'; }).length;
@@ -793,6 +954,14 @@ function renderReport() {
   var html = '' +
     '<div class="hero"><p class="kicker">Your report</p><h1>AI governance readiness</h1>' +
     '<p class="lede">Based on the NIST AI Risk Management Framework' + (industryLabel ? ', tailored for ' + industryLabel : '') + '.</p></div>';
+
+  var scopeDeclaration = describeScope(state.scope);
+  var scopeDeclarationNote = state.scope.id === 'department'
+    ? ' Findings and recommendations below are scoped to this department; org-wide governance may exist above it and is not assessed here.'
+    : state.scope.id === 'initiative'
+    ? ' Findings and recommendations below are scoped to this one system, framed as a pre-deployment review rather than an organization-wide assessment.'
+    : '';
+  html += '<div class="scope-banner"><strong>Assessment scope:</strong> ' + scopeDeclaration + '.' + scopeDeclarationNote + '</div>';
 
   if (scopeText) {
     html += '<div class="scope-banner"><strong>What\'s in this report:</strong> ' + scopeText + '</div>';
@@ -820,6 +989,25 @@ function renderReport() {
       return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3><span class="fn-score">' + pct + '%</span></div>' +
         '<div class="bar"><span style="width:' + pct + '%"></span></div>' +
         '<p class="fn-desc">' + FRAMEWORK.functions[k].desc + '</p></div>';
+    }).join('') + '</div></div>';
+
+  // Self-perception vs. evidence (parallel confidence layer, kept separate from the evidence-based score above)
+  var overconfidentFns = Object.keys(confidenceGap).filter(function(k) { return confidenceGap[k].status === 'overconfident'; });
+  html += '<div class="section"><h2>Self-perception vs. evidence</h2>' +
+    '<p class="qmeta" style="margin-bottom:12px;">The evidence score above reflects what you documented. This asks how prepared you said you FEEL, collected separately so it can not just echo the evidence answers back. A large gap in either direction is itself a finding.</p>' +
+    (overconfidentFns.length > 0 ?
+      '<div class="callout warning"><strong>Confidence outpaces evidence in ' + overconfidentFns.map(function(k) { return FRAMEWORK.functions[k].name; }).join(' and ') + '.</strong> Your team feels more prepared here than the evidence supports \u2014 often the riskiest kind of gap, since it rarely draws attention on its own.</div>' : '') +
+    '<div class="fn-grid">' +
+    Object.keys(FRAMEWORK.functions).map(function(k) {
+      var g = confidenceGap[k];
+      var badgeLabel = g.status === 'overconfident' ? 'Feels more ready than evidence shows' :
+                        g.status === 'underconfident' ? 'Evidence stronger than it feels' :
+                        g.status === 'aligned' ? 'Perception matches evidence' : 'Not enough data';
+      return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
+        (g.status !== 'unknown' ? '<span class="gap-badge ' + g.status + '">' + badgeLabel + '</span>' : '') + '</div>' +
+        '<div class="fn-compare-row"><span class="fn-compare-label">Evidence</span><div class="bar"><span style="width:' + (g.evidencePct || 0) + '%"></span></div><span>' + (g.evidencePct !== null ? g.evidencePct + '%' : '\u2014') + '</span></div>' +
+        '<div class="fn-compare-row"><span class="fn-compare-label">Confidence</span><div class="bar confidence"><span style="width:' + (g.confidencePct || 0) + '%"></span></div><span>' + (g.confidencePct !== null ? g.confidencePct + '%' : '\u2014') + '</span></div>' +
+        '</div>';
     }).join('') + '</div></div>';
 
   // Recommendations
@@ -860,6 +1048,7 @@ function renderReport() {
   el('stage-report').innerHTML = html;
 
   el('btn-restart').addEventListener('click', function() {
+    state.scope = { id: null, name: '' };
     state.profile = { orgType: null, servesYouth: null, industry: null, size: null, region: null, regulated: [], customerType: null, aiMaturity: null };
     state.toolsSelected = [];
     state.otherTools = [];
@@ -867,6 +1056,7 @@ function renderReport() {
     state.questions = [];
     state.answers = {};
     state.idx = 0;
+    state.confidenceAnswers = {};
     renderIntro();
   });
   el('btn-print').addEventListener('click', function() { window.print(); });

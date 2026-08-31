@@ -67,6 +67,34 @@ export function computeTier(overall) {
   };
 }
 
+// Compares self-reported confidence (Likert 1-5, independent input) against the
+// evidence-anchored score per NIST function. Never blended into computeScores' output --
+// this is a separate lens, not a replacement for evidence-based scoring.
+// GAP_THRESHOLD: percentage points apart before we call it a real gap rather than noise.
+export var GAP_THRESHOLD = 20;
+
+export function computeConfidenceGap(scores, confidenceAnswers) {
+  var result = {};
+  Object.keys(FRAMEWORK.functions).forEach(function(fn) {
+    var s = scores.fnScores[fn];
+    // Defensive: base questions always cover all four functions at every depth,
+    // so max is never 0 in practice. Mirrors the getQuestionsForAssessment guard above.
+    var evidencePct = s.max === 0 ? null : Math.round((s.sum / s.max) * 100);
+    var v = confidenceAnswers[fn];
+    var confidencePct = v === undefined ? null : Math.round(((v - 1) / 4) * 100);
+    var gap = null;
+    var status = 'unknown';
+    if (evidencePct !== null && confidencePct !== null) {
+      gap = confidencePct - evidencePct;
+      if (gap >= GAP_THRESHOLD) status = 'overconfident';
+      else if (gap <= -GAP_THRESHOLD) status = 'underconfident';
+      else status = 'aligned';
+    }
+    result[fn] = { evidencePct: evidencePct, confidencePct: confidencePct, gap: gap, status: status };
+  });
+  return result;
+}
+
 export function identifyGaps(questions, answers) {
   var gaps = [];
   questions.forEach(function(q) {
@@ -120,4 +148,46 @@ export function hasIndustryOverlay(profile) {
   // Nonprofit and youth-serving are independent modules that always apply based on profile flags.
   // No industry-specific overlays in v2 for other industries.
   return false;
+}
+
+// ============================================================================
+// ASSESSMENT SCOPE (v2 SS12.2): whole org / department / specific AI initiative.
+// Question text itself is not rewritten per scope (see the comment on SCOPE_OPTIONS
+// in data.js for why); these functions carry the two things that DO change per scope:
+// what the confidence questions call the respondent's subject, and how a
+// recommendation and the report's declared scope are framed.
+// ============================================================================
+
+export function scopeSubject(scopeId) {
+  if (scopeId === 'department') return 'your department';
+  if (scopeId === 'initiative') return 'this initiative';
+  return 'your organization';
+}
+
+export function describeScope(scope) {
+  if (!scope || !scope.id || scope.id === 'org') return 'Whole organization';
+  var name = scope.name && scope.name.trim() ? scope.name.trim() : null;
+  if (scope.id === 'department') return name ? name + ' department' : 'A specific department (unnamed)';
+  if (scope.id === 'initiative') return name ? name + ' (AI initiative)' : 'A specific AI initiative (unnamed)';
+  return 'Whole organization';
+}
+
+// Appends scope-specific framing to each recommendation's body without mutating the
+// input array or its objects. Org scope (or no scope) is a pass-through: recs is
+// returned unchanged, matching buildRecommendations' existing org-wide framing.
+export function applyScopeFraming(recs, scope) {
+  if (!scope || !scope.id || scope.id === 'org') return recs;
+  var note;
+  if (scope.id === 'department') {
+    var deptName = scope.name && scope.name.trim() ? scope.name.trim() : 'this department';
+    note = 'Scoped to ' + deptName + '. Organization-wide AI governance may already exist above this level \u2014 confirm with whoever owns policy for the full organization before treating this as a company-wide gap.';
+  } else if (scope.id === 'initiative') {
+    var initName = scope.name && scope.name.trim() ? scope.name.trim() : 'this AI initiative';
+    note = 'Scoped to ' + initName + '. Treat as part of a pre-deployment review: resolve before this system moves further into production, not as a general organizational policy gap.';
+  } else {
+    return recs;
+  }
+  return recs.map(function(r) {
+    return { priority: r.priority, fn: r.fn, module: r.module, title: r.title, body: r.body + ' ' + note };
+  });
 }
