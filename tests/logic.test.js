@@ -1527,12 +1527,19 @@ describe('getQuestionsForAssessment role-based visibility filtering (B8)', () =>
     expect(leadership.map(q => q.id)).toEqual(noRole.map(q => q.id));
   });
 
-  it('always includes items with no visibilityTag, regardless of role/department', () => {
-    const untaggedIds = BASE_QUESTIONS.filter(q => !q.visibilityTag).map(q => q.id);
-    expect(untaggedIds.length).toBeGreaterThan(0); // the original 20 base questions predate R9's tagging pass
-    const financeEmployee = getQuestionsForAssessment(forProfit, 'comprehensive', { id: 'employee', department: 'finance' });
+  it('always includes items with no visibilityTag, regardless of role/department -- exercised via NONPROFIT_QUESTIONS/YOUTH_QUESTIONS, since all 53 BASE_QUESTIONS are now tagged', () => {
+    const nonprofitAndYouth = { orgType: 'nonprofit', servesYouth: true };
+    const untaggedNonprofitYouthIds = NONPROFIT_QUESTIONS.concat(YOUTH_QUESTIONS)
+      .filter(q => !q.visibilityTag).map(q => q.id);
+    expect(untaggedNonprofitYouthIds.length).toBeGreaterThan(0); // np/y modules are out of this pass's stated scope
+    const financeEmployee = getQuestionsForAssessment(nonprofitAndYouth, 'comprehensive', { id: 'employee', department: 'finance' });
     const financeIds = financeEmployee.map(q => q.id);
-    untaggedIds.forEach(id => expect(financeIds).toContain(id));
+    untaggedNonprofitYouthIds.forEach(id => expect(financeIds).toContain(id));
+  });
+
+  it('every BASE_QUESTIONS item now carries a visibilityTag -- no untagged base items remain after the follow-up tagging pass', () => {
+    const untaggedBaseIds = BASE_QUESTIONS.filter(q => !q.visibilityTag).map(q => q.id);
+    expect(untaggedBaseIds).toEqual([]);
   });
 
   it('excludes technical-build and legal-compliance and strategic tagged items for a Finance department respondent, who only gets operational', () => {
@@ -1619,5 +1626,39 @@ describe('R8 item-bank merge data integrity (B8/B9, 2026-08-31)', () => {
   it('MANAGE 1.1 and 2.1 were deliberately not drafted here -- ma1-ma5 (original) plus ma6-ma8 (R8) is 8 MANAGE items total, not 10', () => {
     const manageIds = BASE_QUESTIONS.filter(q => q.fn === 'manage').map(q => q.id);
     expect(manageIds.length).toBe(8);
+  });
+});
+
+describe("original 20 base questions -- retroactive visibilityTag pass (same-day follow-up to B9)", () => {
+  const ORIGINAL_20_IDS = ['g1','g2','g3','g4','g5','m1','m2','m3','m4','m5',
+    'me1','me2','me3','me4','me5','ma1','ma2','ma3','ma4','ma5'];
+  const dimensionIds = GOVERNANCE_DIMENSIONS.map(d => d.id);
+
+  it('all 20 original base questions have a valid VISIBILITY_TAGS value assigned', () => {
+    ORIGINAL_20_IDS.forEach(id => {
+      const q = BASE_QUESTIONS.find(bq => bq.id === id);
+      expect(q.visibilityTag).toBeTruthy();
+      expect(VISIBILITY_TAGS).toContain(q.visibilityTag);
+    });
+  });
+
+  it('the g5 board/leadership question is tagged strategic, matching its own text explicitly', () => {
+    const g5 = BASE_QUESTIONS.find(q => q.id === 'g5');
+    expect(g5.visibilityTag).toBe('strategic');
+  });
+
+  it('did not change any dimension, depths, text, hint, or options on the original 20 -- tagging is additive only', () => {
+    ORIGINAL_20_IDS.forEach(id => {
+      const q = BASE_QUESTIONS.find(bq => bq.id === id);
+      expect(dimensionIds).toContain(q.dimension);
+      expect(q.module).toBe('base');
+      expect(q.depths.length).toBeGreaterThan(0);
+      expect(q.options.length).toBe(4);
+    });
+  });
+
+  it('every VISIBILITY_TAGS value is used by at least one of the original 20 -- the pass did not default everything to one tag', () => {
+    const usedTags = new Set(ORIGINAL_20_IDS.map(id => BASE_QUESTIONS.find(bq => bq.id === id).visibilityTag));
+    VISIBILITY_TAGS.forEach(tag => expect(usedTags.has(tag)).toBe(true));
   });
 });

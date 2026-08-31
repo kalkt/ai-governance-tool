@@ -32,12 +32,14 @@ export function getApplicableModules(profile) {
 // unchanged -- an omitted role means no visibility filtering, exactly
 // today's pre-B8 behavior. When role IS supplied, filtering happens by
 // each item's optional visibilityTag (data.js, R9): an item with no tag
-// (the original 20 base questions -- see the comment above R8's 33 items
-// in data.js) stays visible to everyone regardless of role, since it was
-// never reviewed for a specific vantage-point restriction. An item WITH a
-// tag is included only if getVisibilityTagsForRole(role) (below) contains
-// that tag -- e.g. a 'technical-build'-tagged item only reaches a
-// leadership respondent or an IT/Engineering department respondent, not a
+// (NONPROFIT_QUESTIONS/YOUTH_QUESTIONS only, as of the same-day follow-up
+// pass that retroactively tagged all 53 BASE_QUESTIONS -- see the comment
+// above R8's 33 items in data.js) stays visible to everyone regardless of
+// role, since those modules were never reviewed for a specific
+// vantage-point restriction. An item WITH a tag is included only if
+// getVisibilityTagsForRole(role) (below) contains that tag -- e.g. a
+// 'technical-build'-tagged item only reaches a leadership respondent or an
+// IT/Engineering department respondent, not a
 // Finance department respondent. Department -> tag inference, and
 // leadership's unconditional full-pool access, are B4/B11's job
 // (getVisibilityTagsForDepartment/getVisibilityTagsForRole below) -- this
