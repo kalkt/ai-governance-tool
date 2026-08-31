@@ -58,13 +58,27 @@ that drops under that line.
 ⚠️ **Ask first**
 - Adding a new `TOOL_MASTER_LIST` category, or changing the scoring/tiering
   logic in `src/logic.js` (`computeScores`, `computeTier`, `GAP_THRESHOLD`).
-- Starting any numbered Build item (B1–B24 in the backlog) not already
+- Starting any numbered Build item (B1–B25+ in the backlog) not already
   explicitly authorized by Kartik in this conversation.
 - Any visual/UI redesign decision — colors, typography, layout — that isn't
   already specified in `ai-governance-tool-backlog.md`.
+- Committing/pushing when something genuinely went wrong or is ambiguous
+  (tests fail, coverage drops below the 90% gate, a real design judgment
+  call came up that isn't resolved by this file or the backlog, scope crept
+  past what was authorized) — stop and report instead of pushing through.
+
+✅ **Commit and push, standing authorization (2026-08-31, Kartik):**
+When a task's deliverables are done cleanly — `npm test` passes, coverage
+clears the 90% gate, `npm run build` succeeds, nothing flagged as broken or
+ambiguous — commit and push without waiting to be asked each time. This
+replaces the old blanket "never commit without being asked" rule below;
+that rule now only covers the not-clean case. Still applies regardless:
+match the existing git identity (see Conventions above), write a real
+commit message (what changed and why, not just "B_ done"), and mark the
+relevant backlog item `[x]` with the same level of detail as existing
+entries in the same commit or an immediately following one.
 
 🚫 **Never**
-- Commit or push to git without being explicitly asked.
 - Invent a tool classification, certification, citation, or regulatory
   finding not backed by a real, checkable source. If uncertain, say so
   rather than filling the gap.
@@ -72,6 +86,7 @@ that drops under that line.
   batch and the confidence-gap/scope feature both existed in this repo
   without this file's author knowing, until specifically checked for. Check
   `git log` and grep for existing entries before assuming a clean slate.
+- Commit or push when the ask-first case above applies — see there.
 
 ## Where things actually live
 
