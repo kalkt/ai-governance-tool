@@ -191,3 +191,55 @@ export function applyScopeFraming(recs, scope) {
     return { priority: r.priority, fn: r.fn, module: r.module, title: r.title, body: r.body + ' ' + note };
   });
 }
+
+// ============================================================================
+// RESPONDENT ROLE (B3): who is answering, reconciled against assessment scope above.
+// Per backlog SS1.4.1, role and scope are related but distinct axes -- this section
+// does not touch question selection/routing (getApplicableModules,
+// getQuestionsForAssessment stay role-blind); it only changes framing/caveat copy.
+// Role-based item routing via a visibilityTag is B8/B11's job once B4's data model
+// (entity/department/respondent/assessment-run schema) exists -- deliberately not
+// built here.
+// ============================================================================
+
+export function describeRole(role) {
+  if (!role || !role.id) return null;
+  if (role.id === 'leadership') return 'Leadership / executive';
+  if (role.id === 'dept-role') return 'Department / function';
+  if (role.id === 'employee') {
+    var dept = role.department && role.department.trim() ? role.department.trim() : null;
+    return dept ? 'Individual employee (' + dept + ')' : 'Individual employee';
+  }
+  return null;
+}
+
+// Flags when a respondent's likely visibility doesn't match the scope they're
+// assessing -- e.g. an individual employee or a single department answering for the
+// whole organization may not actually see governance that exists above their own
+// vantage point. Returns null when no caveat applies: leadership is assumed org-wide
+// visible regardless of scope, and a narrower role assessing its own narrower scope
+// (a department respondent scoped to their own department) has no visibility mismatch
+// to flag.
+export function roleVisibilityCaveat(role, scope) {
+  if (!role || !role.id || role.id === 'leadership') return null;
+  var scopeId = scope && scope.id ? scope.id : 'org';
+  if (scopeId !== 'org') return null;
+  if (role.id === 'employee') {
+    return 'You are answering as an individual employee about the whole organization. Answer only what you have direct evidence of — if you are not sure whether a policy or control exists above your own vantage point, say so rather than guessing.';
+  }
+  if (role.id === 'dept-role') {
+    return 'You are answering from within a single department/function about the whole organization. Flag anywhere you cannot confirm what exists at the organization level.';
+  }
+  return null;
+}
+
+// Appends a role-visibility caveat to each recommendation's body, mirroring
+// applyScopeFraming's immutability (returns a new array/objects, never mutates input).
+// Pass-through (recs returned unchanged) when roleVisibilityCaveat finds no mismatch.
+export function applyRoleFraming(recs, role, scope) {
+  var caveat = roleVisibilityCaveat(role, scope);
+  if (!caveat) return recs;
+  return recs.map(function(r) {
+    return { priority: r.priority, fn: r.fn, module: r.module, title: r.title, body: r.body + ' ' + caveat };
+  });
+}

@@ -13,7 +13,10 @@ import {
   GAP_THRESHOLD,
   scopeSubject,
   describeScope,
-  applyScopeFraming
+  applyScopeFraming,
+  describeRole,
+  roleVisibilityCaveat,
+  applyRoleFraming
 } from '../src/logic.js';
 import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS } from '../src/data.js';
 
@@ -610,5 +613,110 @@ describe('applyScopeFraming', () => {
 
   it('handles an empty recs array', () => {
     expect(applyScopeFraming([], { id: 'department', name: 'Ops' })).toEqual([]);
+  });
+});
+
+describe('describeRole', () => {
+  it('returns null for a missing or empty role', () => {
+    expect(describeRole(null)).toBeNull();
+    expect(describeRole({})).toBeNull();
+  });
+
+  it('describes the leadership role', () => {
+    expect(describeRole({ id: 'leadership' })).toBe('Leadership / executive');
+  });
+
+  it('describes the department-role respondent type', () => {
+    expect(describeRole({ id: 'dept-role' })).toBe('Department / function');
+  });
+
+  it('describes an employee role without a department', () => {
+    expect(describeRole({ id: 'employee', department: '' })).toBe('Individual employee');
+    expect(describeRole({ id: 'employee' })).toBe('Individual employee');
+  });
+
+  it('describes an employee role with a department, trimmed', () => {
+    expect(describeRole({ id: 'employee', department: '  Marketing  ' })).toBe('Individual employee (Marketing)');
+  });
+
+  it('returns null for an unrecognized role id', () => {
+    expect(describeRole({ id: 'something-else' })).toBeNull();
+  });
+});
+
+describe('roleVisibilityCaveat', () => {
+  it('returns null when role is missing entirely', () => {
+    expect(roleVisibilityCaveat(null, { id: 'org' })).toBeNull();
+    expect(roleVisibilityCaveat({}, { id: 'org' })).toBeNull();
+  });
+
+  it('returns null for leadership regardless of scope', () => {
+    expect(roleVisibilityCaveat({ id: 'leadership' }, { id: 'org' })).toBeNull();
+    expect(roleVisibilityCaveat({ id: 'leadership' }, { id: 'department' })).toBeNull();
+  });
+
+  it('flags an individual employee assessing the whole organization', () => {
+    const caveat = roleVisibilityCaveat({ id: 'employee' }, { id: 'org' });
+    expect(caveat).toContain('individual employee');
+    expect(caveat).toContain('whole organization');
+  });
+
+  it('flags a department-role respondent assessing the whole organization', () => {
+    const caveat = roleVisibilityCaveat({ id: 'dept-role' }, { id: 'org' });
+    expect(caveat).toContain('single department/function');
+  });
+
+  it('treats a missing scope the same as org scope', () => {
+    expect(roleVisibilityCaveat({ id: 'employee' }, null)).toContain('whole organization');
+    expect(roleVisibilityCaveat({ id: 'employee' }, undefined)).toContain('whole organization');
+  });
+
+  it('returns null when a narrower role matches a narrower scope', () => {
+    expect(roleVisibilityCaveat({ id: 'employee' }, { id: 'department' })).toBeNull();
+    expect(roleVisibilityCaveat({ id: 'dept-role' }, { id: 'initiative' })).toBeNull();
+  });
+
+  it('returns null for an unrecognized role id', () => {
+    expect(roleVisibilityCaveat({ id: 'something-else' }, { id: 'org' })).toBeNull();
+  });
+});
+
+describe('applyRoleFraming', () => {
+  const baseRecs = [
+    { priority: 'high', fn: 'govern', module: 'base', title: 'Write a basic AI use policy', body: 'No baseline in place today.' }
+  ];
+
+  it('returns the same recs unchanged when no caveat applies', () => {
+    const result = applyRoleFraming(baseRecs, { id: 'leadership' }, { id: 'org' });
+    expect(result).toEqual(baseRecs);
+  });
+
+  it('returns the same recs unchanged when role is missing', () => {
+    expect(applyRoleFraming(baseRecs, null, { id: 'org' })).toEqual(baseRecs);
+  });
+
+  it('appends the role caveat without mutating the original recs', () => {
+    const result = applyRoleFraming(baseRecs, { id: 'employee' }, { id: 'org' });
+    expect(result[0].body).toContain('No baseline in place today.');
+    expect(result[0].body).toContain('individual employee');
+    expect(baseRecs[0].body).toBe('No baseline in place today.'); // original untouched
+  });
+
+  it('preserves every other field on each recommendation unchanged', () => {
+    const result = applyRoleFraming(baseRecs, { id: 'dept-role' }, { id: 'org' });
+    expect(result[0].priority).toBe(baseRecs[0].priority);
+    expect(result[0].fn).toBe(baseRecs[0].fn);
+    expect(result[0].module).toBe(baseRecs[0].module);
+    expect(result[0].title).toBe(baseRecs[0].title);
+  });
+
+  it('handles an empty recs array', () => {
+    expect(applyRoleFraming([], { id: 'employee' }, { id: 'org' })).toEqual([]);
+  });
+
+  it('composes cleanly after applyScopeFraming (both notes present)', () => {
+    const scoped = applyScopeFraming(baseRecs, { id: 'org', name: '' });
+    const result = applyRoleFraming(scoped, { id: 'employee' }, { id: 'org' });
+    expect(result[0].body).toContain('individual employee');
   });
 });

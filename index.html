@@ -259,7 +259,8 @@ import {
   TOOL_MASTER_LIST,
   CONFIDENCE_QUESTIONS,
   LIKERT_OPTIONS,
-  SCOPE_OPTIONS
+  SCOPE_OPTIONS,
+  ROLE_OPTIONS
 } from './src/data.js';
 import {
   getApplicableModules,
@@ -273,7 +274,10 @@ import {
   computeConfidenceGap,
   scopeSubject,
   describeScope,
-  applyScopeFraming
+  applyScopeFraming,
+  describeRole,
+  roleVisibilityCaveat,
+  applyRoleFraming
 } from './src/logic.js';
 
 // ============================================================================
@@ -282,6 +286,7 @@ import {
 
 var state = {
   scope: { id: null, name: '' },  // v2 SS12.2 assessment scope selector
+  role: { id: null, department: '' },  // B3: respondent role, reconciled against scope above
   profile: {
     orgType: null,          // 'nonprofit' | 'for-profit'
     servesYouth: null,      // true | false
@@ -359,7 +364,9 @@ function renderScope() {
   show('stage-scope');
   renderStepper('scope');
   var s = state.scope;
+  var r = state.role;
   var selectedOpt = SCOPE_OPTIONS.find(function(o) { return o.id === s.id; });
+  var selectedRole = ROLE_OPTIONS.find(function(o) { return o.id === r.id; });
 
   el('stage-scope').innerHTML = '' +
     '<div class="hero">' +
@@ -385,6 +392,28 @@ function renderScope() {
 
     '<p id="err-scope" class="err hidden">Pick a scope to continue.</p>' +
 
+    '<div class="hero" style="margin-top: 1.5rem;">' +
+      '<h1 style="font-size: 1.25rem;">Who\'s answering?</h1>' +
+      '<p class="lede">This is separate from the scope above \u2014 a leadership respondent can still answer for a single department, and an individual employee can be asked about the whole organization. It changes how your report is framed, not which scope you chose.</p>' +
+    '</div>' +
+
+    '<div class="choice-grid" id="role-grid">' +
+      ROLE_OPTIONS.map(function(o) {
+        return '<button class="choice' + (r.id === o.id ? ' selected' : '') + '" data-role="' + o.id + '">' +
+          '<h3>' + o.label + '</h3>' +
+          '<p>' + o.tagline + '</p>' +
+        '</button>';
+      }).join('') +
+    '</div>' +
+
+    (selectedRole && selectedRole.hasDepartmentField ?
+      '<div class="field-group" id="role-department-group">' +
+        '<label class="field-label">Your department (optional)</label>' +
+        '<input type="text" id="f-role-department" value="' + escapeHtml(r.department || '') + '" placeholder="e.g. Marketing" />' +
+      '</div>' : '') +
+
+    '<p id="err-role" class="err hidden">Pick who\'s answering to continue.</p>' +
+
     '<div class="row" style="margin-top: 1rem;">' +
       '<button id="btn-back-scope">Back</button>' +
       '<div style="flex:1"></div>' +
@@ -399,14 +428,30 @@ function renderScope() {
     });
   });
 
+  document.querySelectorAll('#role-grid .choice').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      state.role.id = btn.getAttribute('data-role');
+      el('err-role').classList.add('hidden');
+      renderScope();
+    });
+  });
+
   if (el('f-scope-name')) {
     el('f-scope-name').addEventListener('input', function(e) { state.scope.name = e.target.value; });
+  }
+
+  if (el('f-role-department')) {
+    el('f-role-department').addEventListener('input', function(e) { state.role.department = e.target.value; });
   }
 
   el('btn-back-scope').addEventListener('click', renderIntro);
   el('btn-next-scope').addEventListener('click', function() {
     if (!state.scope.id) {
       el('err-scope').classList.remove('hidden');
+      return;
+    }
+    if (!state.role.id) {
+      el('err-role').classList.remove('hidden');
       return;
     }
     renderProfile();
@@ -805,10 +850,12 @@ function renderQuestion() {
   var pct = Math.round((state.idx / total) * 100);
   var moduleLabel = q.module === 'nonprofit' ? 'Nonprofit module' : (q.module === 'youth' ? 'Youth-serving module' : FRAMEWORK.functions[q.fn].name);
 
+  var roleCaveat = roleVisibilityCaveat(state.role, state.scope);
   var scopeBannerHtml = (state.scope.id && state.scope.id !== 'org') ?
     '<div class="callout info" style="margin-bottom: 0.75rem;"><strong>Answering for:</strong> ' + describeScope(state.scope) + '. ' +
     (state.scope.id === 'department' ? 'Answer based on what you can see at the department level \u2014 if you\'re not sure whether something exists above it, say so rather than guessing.' : 'Answer about this one system, not your organization\'s AI use in general.') +
-    '</div>' : '';
+    '</div>' : (roleCaveat ?
+    '<div class="callout info" style="margin-bottom: 0.75rem;"><strong>Answering for:</strong> ' + describeScope(state.scope) + '. ' + roleCaveat + '</div>' : '');
 
   el('stage-quiz').innerHTML = '' +
     scopeBannerHtml +
@@ -935,7 +982,7 @@ function renderReport() {
   var scores = computeScores(state.questions, state.answers);
   var tier = computeTier(scores.overall);
   var gaps = identifyGaps(state.questions, state.answers);
-  var recs = applyScopeFraming(buildRecommendations(gaps), state.scope).slice(0, 8);
+  var recs = applyRoleFraming(applyScopeFraming(buildRecommendations(gaps), state.scope), state.role, state.scope).slice(0, 8);
   var toolAnalysis = classifyToolsInUse(state.toolsSelected, state.otherTools);
   var modules = getApplicableModules(state.profile);
   var confidenceGap = computeConfidenceGap(scores, state.confidenceAnswers);
@@ -962,6 +1009,11 @@ function renderReport() {
     ? ' Findings and recommendations below are scoped to this one system, framed as a pre-deployment review rather than an organization-wide assessment.'
     : '';
   html += '<div class="scope-banner"><strong>Assessment scope:</strong> ' + scopeDeclaration + '.' + scopeDeclarationNote + '</div>';
+
+  var roleDeclaration = describeRole(state.role);
+  if (roleDeclaration) {
+    html += '<div class="scope-banner"><strong>Answered by:</strong> ' + roleDeclaration + '.</div>';
+  }
 
   if (scopeText) {
     html += '<div class="scope-banner"><strong>What\'s in this report:</strong> ' + scopeText + '</div>';
@@ -1049,6 +1101,7 @@ function renderReport() {
 
   el('btn-restart').addEventListener('click', function() {
     state.scope = { id: null, name: '' };
+    state.role = { id: null, department: '' };
     state.profile = { orgType: null, servesYouth: null, industry: null, size: null, region: null, regulated: [], customerType: null, aiMaturity: null };
     state.toolsSelected = [];
     state.otherTools = [];

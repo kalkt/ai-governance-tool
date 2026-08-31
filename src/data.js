@@ -63,6 +63,33 @@ export const SCOPE_OPTIONS = [
     nameLabel: 'AI system or initiative name (optional)' }
 ];
 
+// Respondent role selector (B3): the three respondent types from the project backlog
+// SS1.4.1 -- leadership/executive, department/function, individual employee. Role (who
+// is answering) and scope (SCOPE_OPTIONS above, what is being assessed) are related but
+// distinct axes: a leadership respondent can still answer a department- or initiative-
+// scoped assessment, and an individual employee can be asked about the whole org. This
+// list does NOT drive question selection/routing -- it only changes framing/caveat copy
+// (see roleVisibilityCaveat/describeRole/applyRoleFraming in logic.js). Role-based item
+// routing via a visibilityTag is out of scope here; that's B8/B11's job once B4's data
+// model exists.
+//
+// Naming note: 'dept-role' (not 'department') is deliberate. SCOPE_OPTIONS already uses
+// the id 'department' for a different axis (assessment scope) -- reusing that string
+// here for a different concept is exactly the ambiguity R9 flagged and renamed away from
+// ("enterprise-wide" -> "strategic", to avoid colliding with SCOPE_OPTIONS' 'org' value).
+// Same discipline applied here preemptively.
+export const ROLE_OPTIONS = [
+  { id: 'leadership', label: 'Leadership / executive',
+    tagline: 'CEO, board member, or other role with org-wide visibility and accountability.',
+    hasDepartmentField: false },
+  { id: 'dept-role', label: 'Department / function',
+    tagline: 'You work within one department or function and are answering from that vantage point.',
+    hasDepartmentField: false },
+  { id: 'employee', label: 'Individual employee',
+    tagline: 'You are answering for yourself, not on behalf of a department or the whole organization. Can belong to any department.',
+    hasDepartmentField: true }
+];
+
 // Industry list. Not all industries get overlays. Those that don't get honest scoping banner.
 export const INDUSTRIES = [
   { id: 'nonprofit-social', label: 'Nonprofit / Social services' },
