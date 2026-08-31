@@ -159,9 +159,28 @@ export const INDUSTRIES = [
   { id: 'other', label: 'Other' }
 ];
 
+// Governance Maturity sub-dimensions (B5, backlog SS1.4.5): five weighted
+// dimensions that replace computeScores()'s old flat percentage as `overall`
+// -- see computeScores() in logic.js for the weighted+gated calculation and
+// GOVERNANCE_GATING_THRESHOLD for the Ownership & Accountability gating rule.
+// Weights match SS1.4.5's table exactly (20/20/20/25/15, sums to 100).
+// `dimension` below tags every question in BASE_QUESTIONS/NONPROFIT_QUESTIONS/
+// YOUTH_QUESTIONS with one of these ids -- a second, orthogonal axis from
+// `fn` (NIST function), the same relationship role has to visibility-tag
+// (B3/B4). Collision-checked against SCOPE_OPTIONS/ROLE_OPTIONS/
+// VISIBILITY_TAGS/DEPARTMENTS ids -- none of these five strings are reused
+// from any of those lists.
+export const GOVERNANCE_DIMENSIONS = [
+  { id: 'ownership-accountability', label: 'Ownership & Accountability', weight: 20 },
+  { id: 'inventory-visibility', label: 'Inventory & Visibility', weight: 20 },
+  { id: 'risk-classification', label: 'Risk Classification', weight: 20 },
+  { id: 'controls-evidence', label: 'Controls & Evidence', weight: 25 },
+  { id: 'monitoring-response', label: 'Monitoring & Response', weight: 15 }
+];
+
 // Base NIST questions (from v1, unchanged)
 export const BASE_QUESTIONS = [
-  { id: 'g1', fn: 'govern', module: 'base', depths: ['quick','standard','comprehensive'],
+  { id: 'g1', fn: 'govern', module: 'base', dimension: 'controls-evidence', depths: ['quick','standard','comprehensive'],
     text: 'Does your business have a written policy on how employees can use AI tools?',
     hint: 'Includes ChatGPT, Copilot, Gemini, or any AI feature inside existing software.',
     options: [
@@ -170,7 +189,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Written policy, not consistently followed' },
       { v: 3, label: 'Written policy, reviewed and enforced' }
     ]},
-  { id: 'g2', fn: 'govern', module: 'base', depths: ['quick','standard','comprehensive'],
+  { id: 'g2', fn: 'govern', module: 'base', dimension: 'ownership-accountability', depths: ['quick','standard','comprehensive'],
     text: 'Who is accountable when an AI tool causes a problem?',
     hint: 'Wrong output sent to a customer, sensitive data exposed to a model, and so on.',
     options: [
@@ -179,7 +198,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'A specific person, but not documented' },
       { v: 3, label: 'A named owner with documented responsibility' }
     ]},
-  { id: 'g3', fn: 'govern', module: 'base', depths: ['standard','comprehensive'],
+  { id: 'g3', fn: 'govern', module: 'base', dimension: 'controls-evidence', depths: ['standard','comprehensive'],
     text: 'Do you have an approval process before adopting new AI tools?',
     options: [
       { v: 0, label: 'No, teams adopt tools freely' },
@@ -187,7 +206,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Yes, informal review' },
       { v: 3, label: 'Formal review with approval criteria' }
     ]},
-  { id: 'g4', fn: 'govern', module: 'base', depths: ['comprehensive'],
+  { id: 'g4', fn: 'govern', module: 'base', dimension: 'controls-evidence', depths: ['comprehensive'],
     text: 'Do you train employees on responsible AI use?',
     options: [
       { v: 0, label: 'No training' },
@@ -195,7 +214,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Occasional refreshers' },
       { v: 3, label: 'Structured, role-specific, updated regularly' }
     ]},
-  { id: 'g5', fn: 'govern', module: 'base', depths: ['comprehensive'],
+  { id: 'g5', fn: 'govern', module: 'base', dimension: 'ownership-accountability', depths: ['comprehensive'],
     text: 'Are AI risks discussed at leadership or board level?',
     options: [
       { v: 0, label: 'Never' },
@@ -203,7 +222,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Occasionally as part of tech updates' },
       { v: 3, label: 'Regularly, with dedicated agenda time' }
     ]},
-  { id: 'm1', fn: 'map', module: 'base', depths: ['quick','standard','comprehensive'],
+  { id: 'm1', fn: 'map', module: 'base', dimension: 'inventory-visibility', depths: ['quick','standard','comprehensive'],
     text: 'Do you know which AI tools your team is actually using?',
     hint: 'Includes tools built into products you already pay for.',
     options: [
@@ -212,7 +231,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Documented list, updated occasionally' },
       { v: 3, label: 'Current inventory reviewed quarterly' }
     ]},
-  { id: 'm2', fn: 'map', module: 'base', depths: ['quick','standard','comprehensive'],
+  { id: 'm2', fn: 'map', module: 'base', dimension: 'risk-classification', depths: ['quick','standard','comprehensive'],
     text: 'For each AI use case, have you identified who could be harmed by a mistake?',
     options: [
       { v: 0, label: 'Not considered' },
@@ -220,7 +239,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Considered for most cases' },
       { v: 3, label: 'Systematic impact analysis per use case' }
     ]},
-  { id: 'm3', fn: 'map', module: 'base', depths: ['standard','comprehensive'],
+  { id: 'm3', fn: 'map', module: 'base', dimension: 'risk-classification', depths: ['standard','comprehensive'],
     text: 'Do you classify AI use cases by risk level?',
     hint: 'Example: low (drafting), medium (customer response), high (hiring, credit, medical).',
     options: [
@@ -229,7 +248,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Simple tiers used sometimes' },
       { v: 3, label: 'Documented tiers applied to every new use case' }
     ]},
-  { id: 'm4', fn: 'map', module: 'base', depths: ['comprehensive'],
+  { id: 'm4', fn: 'map', module: 'base', dimension: 'inventory-visibility', depths: ['comprehensive'],
     text: 'Do you know what data your AI tools can access?',
     options: [
       { v: 0, label: 'No, and no easy way to find out' },
@@ -237,7 +256,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Mostly known, some gaps' },
       { v: 3, label: 'Fully mapped, reviewed regularly' }
     ]},
-  { id: 'm5', fn: 'map', module: 'base', depths: ['comprehensive'],
+  { id: 'm5', fn: 'map', module: 'base', dimension: 'risk-classification', depths: ['comprehensive'],
     text: 'Do you evaluate third-party AI vendors before onboarding them?',
     options: [
       { v: 0, label: 'No vendor review' },
@@ -245,7 +264,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Basic security or privacy questionnaire' },
       { v: 3, label: 'Structured review including AI-specific risks' }
     ]},
-  { id: 'me1', fn: 'measure', module: 'base', depths: ['quick','standard','comprehensive'],
+  { id: 'me1', fn: 'measure', module: 'base', dimension: 'monitoring-response', depths: ['quick','standard','comprehensive'],
     text: 'How do you check whether AI output is accurate or reliable?',
     options: [
       { v: 0, label: 'We do not check' },
@@ -253,7 +272,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Sampling reviews on high-stakes outputs' },
       { v: 3, label: 'Structured review with documented metrics' }
     ]},
-  { id: 'me2', fn: 'measure', module: 'base', depths: ['quick','standard','comprehensive'],
+  { id: 'me2', fn: 'measure', module: 'base', dimension: 'monitoring-response', depths: ['quick','standard','comprehensive'],
     text: 'Do you track incidents related to AI use?',
     hint: 'Wrong outputs sent externally, prompt leakage, biased results, and so on.',
     options: [
@@ -262,7 +281,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Informal log kept' },
       { v: 3, label: 'Formal incident register with review cadence' }
     ]},
-  { id: 'me3', fn: 'measure', module: 'base', depths: ['standard','comprehensive'],
+  { id: 'me3', fn: 'measure', module: 'base', dimension: 'monitoring-response', depths: ['standard','comprehensive'],
     text: 'Do you monitor for bias in AI outputs that affect people?',
     hint: 'Especially in hiring, customer service, pricing, or eligibility decisions.',
     options: [
@@ -271,7 +290,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Periodic manual review' },
       { v: 3, label: 'Regular structured testing' }
     ]},
-  { id: 'me4', fn: 'measure', module: 'base', depths: ['comprehensive'],
+  { id: 'me4', fn: 'measure', module: 'base', dimension: 'controls-evidence', depths: ['comprehensive'],
     text: 'Do you keep records of AI decisions that affect customers or employees?',
     options: [
       { v: 0, label: 'No records' },
@@ -279,7 +298,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Some records, inconsistent' },
       { v: 3, label: 'Systematic logging with retention policy' }
     ]},
-  { id: 'me5', fn: 'measure', module: 'base', depths: ['comprehensive'],
+  { id: 'me5', fn: 'measure', module: 'base', dimension: 'monitoring-response', depths: ['comprehensive'],
     text: 'How often do you re-evaluate the AI tools you use?',
     options: [
       { v: 0, label: 'Never after initial adoption' },
@@ -287,7 +306,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Annually' },
       { v: 3, label: 'On a defined cadence with criteria' }
     ]},
-  { id: 'ma1', fn: 'manage', module: 'base', depths: ['quick','standard','comprehensive'],
+  { id: 'ma1', fn: 'manage', module: 'base', dimension: 'monitoring-response', depths: ['quick','standard','comprehensive'],
     text: 'If an AI tool produced a harmful output right now, what happens next?',
     options: [
       { v: 0, label: 'Nothing formal, depends who notices' },
@@ -295,7 +314,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Escalation path exists but is untested' },
       { v: 3, label: 'Documented response plan, tested at least once' }
     ]},
-  { id: 'ma2', fn: 'manage', module: 'base', depths: ['quick','standard','comprehensive'],
+  { id: 'ma2', fn: 'manage', module: 'base', dimension: 'monitoring-response', depths: ['quick','standard','comprehensive'],
     text: 'Can you turn off or roll back an AI tool quickly if needed?',
     options: [
       { v: 0, label: 'No, would take days or longer' },
@@ -303,7 +322,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Yes, within a few hours' },
       { v: 3, label: 'Yes, quickly and with a documented process' }
     ]},
-  { id: 'ma3', fn: 'manage', module: 'base', depths: ['standard','comprehensive'],
+  { id: 'ma3', fn: 'manage', module: 'base', dimension: 'controls-evidence', depths: ['standard','comprehensive'],
     text: 'Do customers or employees know when they are interacting with AI?',
     options: [
       { v: 0, label: 'Never disclosed' },
@@ -311,7 +330,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Disclosed in most customer-facing cases' },
       { v: 3, label: 'Disclosed by default, per policy' }
     ]},
-  { id: 'ma4', fn: 'manage', module: 'base', depths: ['comprehensive'],
+  { id: 'ma4', fn: 'manage', module: 'base', dimension: 'controls-evidence', depths: ['comprehensive'],
     text: 'Do you have a way for people to challenge or appeal an AI-driven decision?',
     options: [
       { v: 0, label: 'No mechanism' },
@@ -319,7 +338,7 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'Informal path, not published' },
       { v: 3, label: 'Documented appeal process' }
     ]},
-  { id: 'ma5', fn: 'manage', module: 'base', depths: ['comprehensive'],
+  { id: 'ma5', fn: 'manage', module: 'base', dimension: 'monitoring-response', depths: ['comprehensive'],
     text: 'Do you review your AI risk posture after a significant change?',
     hint: 'New tool, new use case, new regulation, or major incident.',
     options: [
@@ -333,7 +352,7 @@ export const BASE_QUESTIONS = [
 // Nonprofit module: independent from youth-serving. Applies when orgType = 'nonprofit'.
 // Evidence base: BGCAZ engagement (Thunderbird Corporate Partners, Spring 2026).
 export const NONPROFIT_QUESTIONS = [
-  { id: 'np1', fn: 'govern', module: 'nonprofit', depths: ['quick','standard','comprehensive'],
+  { id: 'np1', fn: 'govern', module: 'nonprofit', dimension: 'controls-evidence', depths: ['quick','standard','comprehensive'],
     text: 'Are you using free personal-account AI tools for organizational work?',
     hint: 'Common for cost-constrained nonprofits, but creates data risk without enterprise controls.',
     options: [
@@ -342,7 +361,7 @@ export const NONPROFIT_QUESTIONS = [
       { v: 2, label: 'Mostly enterprise, some personal accounts remain' },
       { v: 3, label: 'Fully on enterprise or organizational accounts' }
     ]},
-  { id: 'np2', fn: 'govern', module: 'nonprofit', depths: ['standard','comprehensive'],
+  { id: 'np2', fn: 'govern', module: 'nonprofit', dimension: 'ownership-accountability', depths: ['standard','comprehensive'],
     text: 'Has your board been briefed on AI adoption and risk?',
     hint: 'Board oversight is a specific governance obligation for 501(c)(3) organizations.',
     options: [
@@ -351,7 +370,7 @@ export const NONPROFIT_QUESTIONS = [
       { v: 2, label: 'Discussed once, no ongoing agenda item' },
       { v: 3, label: 'Structured briefing with ongoing board oversight' }
     ]},
-  { id: 'np3', fn: 'map', module: 'nonprofit', depths: ['standard','comprehensive'],
+  { id: 'np3', fn: 'map', module: 'nonprofit', dimension: 'inventory-visibility', depths: ['standard','comprehensive'],
     text: 'Do you know whether donor data has been entered into any AI tool?',
     hint: 'Includes names combined with giving amounts, donor communications, or Raiser\'s Edge / Salesforce exports.',
     options: [
@@ -360,7 +379,7 @@ export const NONPROFIT_QUESTIONS = [
       { v: 2, label: 'Known limited use with anonymization' },
       { v: 3, label: 'Explicit policy prohibits, verified compliance' }
     ]},
-  { id: 'np4', fn: 'govern', module: 'nonprofit', depths: ['comprehensive'],
+  { id: 'np4', fn: 'govern', module: 'nonprofit', dimension: 'controls-evidence', depths: ['comprehensive'],
     text: 'Have you applied for nonprofit-discounted enterprise AI accounts?',
     hint: 'Google Workspace for Nonprofits, Canva for Nonprofits, ChatGPT Business nonprofit rate, etc. Often free or steeply discounted.',
     options: [
@@ -369,7 +388,7 @@ export const NONPROFIT_QUESTIONS = [
       { v: 2, label: 'Applied for one or two' },
       { v: 3, label: 'Actively using multiple nonprofit-tier enterprise accounts' }
     ]},
-  { id: 'np5', fn: 'measure', module: 'nonprofit', depths: ['comprehensive'],
+  { id: 'np5', fn: 'measure', module: 'nonprofit', dimension: 'inventory-visibility', depths: ['comprehensive'],
     text: 'If your CRM (Salesforce, Raiser\'s Edge, Bloomerang, etc.) has AI features, do you know whether they are active?',
     hint: 'Many nonprofit CRMs now include AI features that may or may not be enabled by default.',
     options: [
@@ -383,7 +402,7 @@ export const NONPROFIT_QUESTIONS = [
 // Youth-serving module: independent from nonprofit. Applies when servesYouth = true.
 // Evidence base: BGCAZ engagement (COPPA analysis), Common Sense Media 2026 assessments.
 export const YOUTH_QUESTIONS = [
-  { id: 'y1', fn: 'govern', module: 'youth', depths: ['quick','standard','comprehensive'],
+  { id: 'y1', fn: 'govern', module: 'youth', dimension: 'inventory-visibility', depths: ['quick','standard','comprehensive'],
     text: 'Do any AI tools your team uses process data about individuals under 13?',
     hint: 'COPPA applies to children under 13. This includes names, program records, incident reports, photos.',
     options: [
@@ -392,7 +411,7 @@ export const YOUTH_QUESTIONS = [
       { v: 2, label: 'Yes, only on tools with compliant Data Processing Agreements' },
       { v: 3, label: 'No youth data enters any AI tool' }
     ]},
-  { id: 'y2', fn: 'govern', module: 'youth', depths: ['quick','standard','comprehensive'],
+  { id: 'y2', fn: 'govern', module: 'youth', dimension: 'controls-evidence', depths: ['quick','standard','comprehensive'],
     text: 'Do you have a written policy specifically about AI use in youth programming?',
     hint: 'Separate from general staff AI policy. Covers what AI can and cannot be used for around minors.',
     options: [
@@ -401,7 +420,7 @@ export const YOUTH_QUESTIONS = [
       { v: 2, label: 'Draft youth AI policy exists, not adopted' },
       { v: 3, label: 'Adopted, HR/Legal-reviewed youth AI policy' }
     ]},
-  { id: 'y3', fn: 'govern', module: 'youth', depths: ['standard','comprehensive'],
+  { id: 'y3', fn: 'govern', module: 'youth', dimension: 'controls-evidence', depths: ['standard','comprehensive'],
     text: 'Do you have parental consent workflows for AI tools that interact with youth?',
     options: [
       { v: 0, label: 'No consent process' },
@@ -409,7 +428,7 @@ export const YOUTH_QUESTIONS = [
       { v: 2, label: 'Specific consent for some AI use cases' },
       { v: 3, label: 'Explicit, informed, specific parental consent per AI use case' }
     ]},
-  { id: 'y4', fn: 'manage', module: 'youth', depths: ['standard','comprehensive'],
+  { id: 'y4', fn: 'manage', module: 'youth', dimension: 'monitoring-response', depths: ['standard','comprehensive'],
     text: 'Do staff know what to do if AI surfaces content that suggests youth safety concerns?',
     hint: 'Examples: signs of abuse, self-harm, or crisis surfaced through AI-analyzed communications or content.',
     options: [
@@ -418,7 +437,7 @@ export const YOUTH_QUESTIONS = [
       { v: 2, label: 'AI-specific protocol drafted but not trained on' },
       { v: 3, label: 'AI-specific crisis protocol, staff trained' }
     ]},
-  { id: 'y5', fn: 'map', module: 'youth', depths: ['comprehensive'],
+  { id: 'y5', fn: 'map', module: 'youth', dimension: 'risk-classification', depths: ['comprehensive'],
     text: 'For AI tools accessible to youth on your premises, have you reviewed age-appropriateness?',
     hint: 'Common Sense Media publishes AI tool risk assessments for teen users. Some tools have documented safety failures with minors.',
     options: [
@@ -427,7 +446,7 @@ export const YOUTH_QUESTIONS = [
       { v: 2, label: 'Reviewed once, no update process' },
       { v: 3, label: 'Structured review with periodic re-assessment' }
     ]},
-  { id: 'y6', fn: 'measure', module: 'youth', depths: ['comprehensive'],
+  { id: 'y6', fn: 'measure', module: 'youth', dimension: 'monitoring-response', depths: ['comprehensive'],
     text: 'If AI is used in any youth-facing capacity, is that use tracked and reviewable?',
     options: [
       { v: 0, label: 'Not tracked' },

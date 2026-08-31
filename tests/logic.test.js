@@ -17,9 +17,10 @@ import {
   describeRole,
   roleVisibilityCaveat,
   applyRoleFraming,
-  getVisibilityTagsForDepartment
+  getVisibilityTagsForDepartment,
+  GOVERNANCE_GATING_THRESHOLD
 } from '../src/logic.js';
-import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS } from '../src/data.js';
+import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS } from '../src/data.js';
 
 describe('computeTier', () => {
   it('classifies a score of exactly 70 as low risk (lower boundary of the low tier)', () => {
@@ -72,7 +73,7 @@ describe('computeScores', () => {
   });
 
   it('excludes unanswered questions from both the sum and the max, rather than scoring them as zero', () => {
-    const questions = [{ id: 'g1', fn: 'govern' }, { id: 'g2', fn: 'govern' }];
+    const questions = [{ id: 'g1', fn: 'govern', dimension: 'controls-evidence' }, { id: 'g2', fn: 'govern', dimension: 'controls-evidence' }];
     const result = computeScores(questions, { g1: 3 });
     expect(result.totalMax).toBe(3);
     expect(result.totalSum).toBe(3);
@@ -104,21 +105,207 @@ describe('computeScores', () => {
   });
 
   it('returns an overall score of 100 when every answered question scores the maximum', () => {
-    const questions = [{ id: 'g1', fn: 'govern' }, { id: 'm1', fn: 'map' }];
+    const questions = [{ id: 'g1', fn: 'govern', dimension: 'controls-evidence' }, { id: 'm1', fn: 'map', dimension: 'inventory-visibility' }];
     const result = computeScores(questions, { g1: 3, m1: 3 });
     expect(result.overall).toBe(100);
   });
 
   it('rounds a fractional percentage down when the decimal is below .5', () => {
-    const questions = [{ id: 'g1', fn: 'govern' }];
+    const questions = [{ id: 'g1', fn: 'govern', dimension: 'controls-evidence' }];
     const result = computeScores(questions, { g1: 1 });
     expect(result.overall).toBe(33);
   });
 
   it('rounds a fractional percentage up when the decimal is at or above .5', () => {
-    const questions = [{ id: 'g1', fn: 'govern' }];
+    const questions = [{ id: 'g1', fn: 'govern', dimension: 'controls-evidence' }];
     const result = computeScores(questions, { g1: 2 });
     expect(result.overall).toBe(67);
+  });
+
+  it('reproduces fnScores identically whether or not questions carry a dimension tag (regression: dimension is additive, not a replacement axis)', () => {
+    const withoutDimension = computeScores(
+      [{ id: 'g1', fn: 'govern' }, { id: 'm1', fn: 'map' }, { id: 'me1', fn: 'measure' }, { id: 'ma1', fn: 'manage' }],
+      { g1: 3, m1: 0, me1: 1, ma1: 2 }
+    );
+    const withDimension = computeScores(
+      [
+        { id: 'g1', fn: 'govern', dimension: 'controls-evidence' },
+        { id: 'm1', fn: 'map', dimension: 'inventory-visibility' },
+        { id: 'me1', fn: 'measure', dimension: 'monitoring-response' },
+        { id: 'ma1', fn: 'manage', dimension: 'monitoring-response' }
+      ],
+      { g1: 3, m1: 0, me1: 1, ma1: 2 }
+    );
+    expect(withDimension.fnScores).toEqual(withoutDimension.fnScores);
+    expect(withDimension.totalSum).toBe(withoutDimension.totalSum);
+    expect(withDimension.totalMax).toBe(withoutDimension.totalMax);
+  });
+
+  it('reproduces fnScores identically for the real, currently-shipped BASE_QUESTIONS bank now that every question carries a dimension tag', () => {
+    // Regression check using real data.js questions, not synthetic mocks --
+    // confirms the B5 dimension-tagging pass didn't perturb fn or scoring math
+    // for any of the 20 live base questions.
+    const answers = {};
+    BASE_QUESTIONS.forEach(function(q, i) { answers[q.id] = i % 4; }); // deterministic spread of 0-3
+    const result = computeScores(BASE_QUESTIONS, answers);
+    let expectedGovern = 0, expectedMap = 0, expectedMeasure = 0, expectedManage = 0;
+    BASE_QUESTIONS.forEach(function(q, i) {
+      const v = i % 4;
+      if (q.fn === 'govern') expectedGovern += v;
+      if (q.fn === 'map') expectedMap += v;
+      if (q.fn === 'measure') expectedMeasure += v;
+      if (q.fn === 'manage') expectedManage += v;
+    });
+    expect(result.fnScores.govern.sum).toBe(expectedGovern);
+    expect(result.fnScores.map.sum).toBe(expectedMap);
+    expect(result.fnScores.measure.sum).toBe(expectedMeasure);
+    expect(result.fnScores.manage.sum).toBe(expectedManage);
+  });
+});
+
+describe('computeScores: Governance Maturity dimensions and gating rule (B5)', () => {
+  it('every question in BASE_QUESTIONS, NONPROFIT_QUESTIONS, and YOUTH_QUESTIONS carries a valid dimension tag', () => {
+    const validIds = GOVERNANCE_DIMENSIONS.map(function(d) { return d.id; });
+    [...BASE_QUESTIONS, ...NONPROFIT_QUESTIONS, ...YOUTH_QUESTIONS].forEach(function(q) {
+      expect(validIds).toContain(q.dimension);
+    });
+  });
+
+  it('GOVERNANCE_DIMENSIONS weights sum to 100', () => {
+    const total = GOVERNANCE_DIMENSIONS.reduce(function(sum, d) { return sum + d.weight; }, 0);
+    expect(total).toBe(100);
+  });
+
+  it('does not let any GOVERNANCE_DIMENSIONS id collide with a SCOPE_OPTIONS, ROLE_OPTIONS, VISIBILITY_TAGS, or DEPARTMENTS id', () => {
+    const reservedIds = ['org', 'department', 'initiative', 'leadership', 'dept-role', 'employee']
+      .concat(VISIBILITY_TAGS)
+      .concat(DEPARTMENTS.map(function(d) { return d.id; }));
+    GOVERNANCE_DIMENSIONS.forEach(function(d) {
+      expect(reservedIds).not.toContain(d.id);
+    });
+  });
+
+  it('returns a dimensionScores entry (sum/max) and a dimensionPct entry for every dimension, even ones with no answered questions', () => {
+    const result = computeScores([{ id: 'g1', fn: 'govern', dimension: 'controls-evidence' }], { g1: 3 });
+    GOVERNANCE_DIMENSIONS.forEach(function(d) {
+      expect(result.dimensionScores[d.id]).toBeDefined();
+    });
+    expect(result.dimensionScores['controls-evidence']).toEqual({ sum: 3, max: 3 });
+    expect(result.dimensionScores['ownership-accountability']).toEqual({ sum: 0, max: 0 });
+    expect(result.dimensionPct['controls-evidence']).toBe(100);
+    expect(result.dimensionPct['ownership-accountability']).toBeNull();
+  });
+
+  it('weights each dimension correctly when several are answered at different percentages', () => {
+    // ownership-accountability 100% (weight 20), controls-evidence 0% (weight 25);
+    // nothing else answered. Weighted avg = (100*20 + 0*25) / (20+25) = 44.44 -> 44.
+    // Ownership pct is 100 (not bottom-tier), so no gating applies.
+    const questions = [
+      { id: 'oa1', fn: 'govern', dimension: 'ownership-accountability' },
+      { id: 'ce1', fn: 'govern', dimension: 'controls-evidence' }
+    ];
+    const result = computeScores(questions, { oa1: 3, ce1: 0 });
+    expect(result.dimensionPct['ownership-accountability']).toBe(100);
+    expect(result.dimensionPct['controls-evidence']).toBe(0);
+    expect(result.overall).toBe(44);
+  });
+
+  it('weights all five dimensions correctly in combination, matching the SS1.4.5 weight table', () => {
+    // ownership-accountability, inventory-visibility, risk-classification, and
+    // monitoring-response all 100%; controls-evidence 0%.
+    // Weighted sum = 100*20 + 100*20 + 100*20 + 0*25 + 100*15 = 7500 / 100 = 75.
+    const questions = [
+      { id: 'oa1', fn: 'govern', dimension: 'ownership-accountability' },
+      { id: 'iv1', fn: 'map', dimension: 'inventory-visibility' },
+      { id: 'rc1', fn: 'map', dimension: 'risk-classification' },
+      { id: 'ce1', fn: 'govern', dimension: 'controls-evidence' },
+      { id: 'mr1', fn: 'manage', dimension: 'monitoring-response' }
+    ];
+    const answers = { oa1: 3, iv1: 3, rc1: 3, ce1: 0, mr1: 3 };
+    const result = computeScores(questions, answers);
+    expect(result.overall).toBe(75);
+  });
+
+  it('caps the overall score at the bottom-tier ceiling when Ownership & Accountability is itself bottom-tier, rather than just lowering it proportionally', () => {
+    // Ownership & Accountability 0% (weight 20); every other dimension 100%.
+    // Un-gated weighted avg would be (0*20 + 100*20 + 100*20 + 100*25 + 100*15) / 100 = 80,
+    // which would land in the "Lower risk" tier despite catastrophic ownership.
+    // The gating rule must cap this at GOVERNANCE_GATING_THRESHOLD - 1 (39), not just
+    // reduce it somewhat -- 80 and "lowered a bit" would both be wrong; only a hard
+    // cap at 39 correctly reflects R2's structural-prerequisite finding.
+    const questions = [
+      { id: 'oa1', fn: 'govern', dimension: 'ownership-accountability' },
+      { id: 'iv1', fn: 'map', dimension: 'inventory-visibility' },
+      { id: 'rc1', fn: 'map', dimension: 'risk-classification' },
+      { id: 'ce1', fn: 'govern', dimension: 'controls-evidence' },
+      { id: 'mr1', fn: 'manage', dimension: 'monitoring-response' }
+    ];
+    const answers = { oa1: 0, iv1: 3, rc1: 3, ce1: 3, mr1: 3 };
+    const result = computeScores(questions, answers);
+    expect(result.dimensionPct['ownership-accountability']).toBe(0);
+    expect(result.overall).toBeLessThanOrEqual(GOVERNANCE_GATING_THRESHOLD - 1);
+    expect(result.overall).toBe(39);
+    // Confirm the assumption the gating ceiling relies on: computeTier still
+    // classifies the capped value as the bottom ("Higher risk") tier.
+    expect(computeTier(result.overall).key).toBe('high');
+  });
+
+  it('does not gate when Ownership & Accountability is answered but not bottom-tier (boundary: exactly at the threshold)', () => {
+    const questions = [
+      { id: 'oa1', fn: 'govern', dimension: 'ownership-accountability' },
+      { id: 'ce1', fn: 'govern', dimension: 'controls-evidence' }
+    ];
+    // oa1 answered at 1.2/3 isn't representable (integer 0-3 scale), so approximate
+    // the 40% boundary directly via dimensionPct instead: 40% needs sum/max=0.4,
+    // e.g. 6/15 -- use three questions each worth 3 to land exactly on 40%.
+    const boundaryQuestions = [
+      { id: 'oa1', fn: 'govern', dimension: 'ownership-accountability' },
+      { id: 'oa2', fn: 'govern', dimension: 'ownership-accountability' },
+      { id: 'oa3', fn: 'govern', dimension: 'ownership-accountability' },
+      { id: 'oa4', fn: 'govern', dimension: 'ownership-accountability' },
+      { id: 'oa5', fn: 'govern', dimension: 'ownership-accountability' },
+      { id: 'ce1', fn: 'govern', dimension: 'controls-evidence' }
+    ];
+    // sum=6, max=15 -> exactly 40%
+    const answers = { oa1: 2, oa2: 1, oa3: 1, oa4: 1, oa5: 1, ce1: 3 };
+    const result = computeScores(boundaryQuestions, answers);
+    expect(result.dimensionPct['ownership-accountability']).toBe(40);
+    // Weighted avg = (40*20 + 100*25) / 45 = (800+2500)/45 = 73.33 -> 73; no gating.
+    expect(result.overall).toBe(73);
+  });
+
+  it('gates when Ownership & Accountability is exactly one point under the threshold (boundary: 39%)', () => {
+    // 25 ownership-accountability questions, all answered, summing to 29 out of a
+    // possible 75 (3 each) -> 29/75 = 38.67%, which rounds to 39 -- one point under
+    // the GOVERNANCE_GATING_THRESHOLD (40) boundary covered by the test above.
+    const oaQuestions = Array.from({ length: 25 }, function(_, i) {
+      return { id: 'oa' + i, fn: 'govern', dimension: 'ownership-accountability' };
+    });
+    const questions = oaQuestions.concat([{ id: 'ce1', fn: 'govern', dimension: 'controls-evidence' }]);
+    const answers = { ce1: 3 };
+    oaQuestions.forEach(function(q, i) {
+      answers[q.id] = i < 9 ? 3 : (i === 9 ? 2 : 0); // 9*3 + 1*2 = 29
+    });
+    const result = computeScores(questions, answers);
+    expect(result.dimensionPct['ownership-accountability']).toBe(39);
+    expect(result.overall).toBe(GOVERNANCE_GATING_THRESHOLD - 1);
+  });
+
+  it('does not gate when Ownership & Accountability has no answered questions at all, even if overall is low', () => {
+    const questions = [
+      { id: 'ce1', fn: 'govern', dimension: 'controls-evidence' }
+    ];
+    const result = computeScores(questions, { ce1: 0 });
+    expect(result.dimensionPct['ownership-accountability']).toBeNull();
+    expect(result.overall).toBe(0); // reflects controls-evidence alone, not a forced cap
+  });
+
+  it('does not gate leadership assumed org-wide, e.g. when every dimension including ownership is 100%', () => {
+    const questions = GOVERNANCE_DIMENSIONS.map(function(d, i) { return { id: 'q' + i, fn: 'govern', dimension: d.id }; });
+    const answers = {};
+    questions.forEach(function(q) { answers[q.id] = 3; });
+    const result = computeScores(questions, answers);
+    expect(result.overall).toBe(100);
   });
 });
 

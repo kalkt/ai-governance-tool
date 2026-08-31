@@ -10,7 +10,8 @@ import {
   YOUTH_QUESTIONS,
   REC_TITLES,
   REC_BODIES,
-  TOOL_MASTER_LIST
+  TOOL_MASTER_LIST,
+  GOVERNANCE_DIMENSIONS
 } from './data.js';
 
 export function getApplicableModules(profile) {
@@ -30,6 +31,15 @@ export function getQuestionsForAssessment(profile, depth) {
   return pool.filter(function(q) { return q.depths.indexOf(depth) !== -1; });
 }
 
+// Bottom-tier threshold for the Ownership & Accountability gating rule below.
+// Intentionally the same value as computeTier()'s own >=40 "medium" boundary
+// (this file) for consistency, per backlog SS1.4.5 -- kept as a separate,
+// independently-exported constant here rather than refactoring computeTier
+// to share one, since this item's scope explicitly leaves computeTier's own
+// code untouched (its existing boundary tests -- 39/40/69/70 -- still pass
+// unchanged, verifying that assumption rather than taking it on faith).
+export var GOVERNANCE_GATING_THRESHOLD = 40;
+
 export function computeScores(questions, answers) {
   var fnScores = {
     govern: { sum: 0, max: 0 },
@@ -37,19 +47,71 @@ export function computeScores(questions, answers) {
     measure: { sum: 0, max: 0 },
     manage: { sum: 0, max: 0 }
   };
+  var dimensionScores = {};
+  GOVERNANCE_DIMENSIONS.forEach(function(d) {
+    dimensionScores[d.id] = { sum: 0, max: 0 };
+  });
+
   questions.forEach(function(q) {
     if (answers[q.id] !== undefined) {
       fnScores[q.fn].sum += answers[q.id];
       fnScores[q.fn].max += 3;
+      if (q.dimension && dimensionScores[q.dimension]) {
+        dimensionScores[q.dimension].sum += answers[q.id];
+        dimensionScores[q.dimension].max += 3;
+      }
     }
   });
+
   var totalSum = 0, totalMax = 0;
   Object.keys(fnScores).forEach(function(k) {
     totalSum += fnScores[k].sum;
     totalMax += fnScores[k].max;
   });
-  var overall = totalMax === 0 ? 0 : Math.round((totalSum / totalMax) * 100);
-  return { fnScores: fnScores, overall: overall, totalSum: totalSum, totalMax: totalMax };
+
+  // Governance Maturity score (B5, backlog SS1.4.5): a weighted average of the
+  // five sub-dimensions above, replacing the old flat totalSum/totalMax
+  // percentage as `overall` -- totalSum/totalMax themselves are unchanged and
+  // still returned below (still a real "points earned out of points possible"
+  // figure), just no longer what `overall` reports. Only dimensions with at
+  // least one answered question count toward the average, renormalized by
+  // their combined weight -- mirrors how an unanswered question is already
+  // excluded from fnScores' own sum/max above rather than scored as zero.
+  var weightedSum = 0, weightUsed = 0;
+  var dimensionPct = {};
+  GOVERNANCE_DIMENSIONS.forEach(function(d) {
+    var ds = dimensionScores[d.id];
+    if (ds.max > 0) {
+      dimensionPct[d.id] = Math.round((ds.sum / ds.max) * 100);
+      weightedSum += (ds.sum / ds.max) * 100 * d.weight;
+      weightUsed += d.weight;
+    } else {
+      dimensionPct[d.id] = null;
+    }
+  });
+  var overall = weightUsed === 0 ? 0 : Math.round(weightedSum / weightUsed);
+
+  // Gating rule (R2, backlog SS1.4.5): a bottom-tier Ownership & Accountability
+  // score caps the overall score at the top of that same bottom tier
+  // regardless of what the other four dimensions computed to -- CSA
+  // whitepaper evidence (73% of orgs report internal ownership conflict; 96%
+  // of CISOs get AI governance responsibility without authority) shows
+  // ownership functions as a structural prerequisite the other four
+  // dimensions depend on, not just one-fifth of a flat weighted average. Only
+  // applies when Ownership & Accountability itself has at least one answered
+  // question -- with none, there is no evidence to gate on.
+  if (dimensionPct['ownership-accountability'] !== null && dimensionPct['ownership-accountability'] < GOVERNANCE_GATING_THRESHOLD) {
+    overall = Math.min(overall, GOVERNANCE_GATING_THRESHOLD - 1);
+  }
+
+  return {
+    fnScores: fnScores,
+    overall: overall,
+    totalSum: totalSum,
+    totalMax: totalMax,
+    dimensionScores: dimensionScores,
+    dimensionPct: dimensionPct
+  };
 }
 
 export function computeTier(overall) {
