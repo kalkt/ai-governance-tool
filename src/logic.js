@@ -27,14 +27,34 @@ export function getApplicableModules(profile) {
   return modules;
 }
 
-export function getQuestionsForAssessment(profile, depth) {
+// B8 (2026-08-31): role param added, optional and last, so every existing
+// call site/test that only ever passed (profile, depth) keeps working
+// unchanged -- an omitted role means no visibility filtering, exactly
+// today's pre-B8 behavior. When role IS supplied, filtering happens by
+// each item's optional visibilityTag (data.js, R9): an item with no tag
+// (the original 20 base questions -- see the comment above R8's 33 items
+// in data.js) stays visible to everyone regardless of role, since it was
+// never reviewed for a specific vantage-point restriction. An item WITH a
+// tag is included only if getVisibilityTagsForRole(role) (below) contains
+// that tag -- e.g. a 'technical-build'-tagged item only reaches a
+// leadership respondent or an IT/Engineering department respondent, not a
+// Finance department respondent. Department -> tag inference, and
+// leadership's unconditional full-pool access, are B4/B11's job
+// (getVisibilityTagsForDepartment/getVisibilityTagsForRole below) -- this
+// function only applies the resulting tag set as a filter.
+export function getQuestionsForAssessment(profile, depth, role) {
   var modules = getApplicableModules(profile);
   var pool = [];
   // base is always present per getApplicableModules, this branch is defensive and intentionally untested
   if (modules.indexOf('base') !== -1) pool = pool.concat(BASE_QUESTIONS);
   if (modules.indexOf('nonprofit') !== -1) pool = pool.concat(NONPROFIT_QUESTIONS);
   if (modules.indexOf('youth') !== -1) pool = pool.concat(YOUTH_QUESTIONS);
-  return pool.filter(function(q) { return q.depths.indexOf(depth) !== -1; });
+  var byDepth = pool.filter(function(q) { return q.depths.indexOf(depth) !== -1; });
+  if (!role) return byDepth;
+  var allowedTags = getVisibilityTagsForRole(role);
+  return byDepth.filter(function(q) {
+    return !q.visibilityTag || allowedTags.indexOf(q.visibilityTag) !== -1;
+  });
 }
 
 // Bottom-tier threshold for the Ownership & Accountability gating rule below.

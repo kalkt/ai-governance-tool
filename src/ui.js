@@ -610,7 +610,7 @@ export function renderDepth() {
       el('err-depth').classList.remove('hidden');
       return;
     }
-    state.questions = getQuestionsForAssessment(state.profile, state.depth);
+    state.questions = getQuestionsForAssessment(state.profile, state.depth, state.role);
     state.idx = 0;
     state.answers = {};
     renderQuestion();
@@ -618,7 +618,11 @@ export function renderDepth() {
 }
 
 export function questionCountForDepth(depth) {
-  return getQuestionsForAssessment(state.profile, depth).length;
+  // B8 (2026-08-31): role included so the depth-selector's displayed count
+  // matches what renderQuestion() will actually show, once role-based
+  // visibility filtering applies -- otherwise this preview count could read
+  // higher than the real quiz length for a filtered role.
+  return getQuestionsForAssessment(state.profile, depth, state.role).length;
 }
 
 export function renderQuestion() {

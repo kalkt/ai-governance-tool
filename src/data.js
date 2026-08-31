@@ -460,6 +460,298 @@ export const BASE_QUESTIONS = [
       { v: 1, label: 'Only after incidents' },
       { v: 2, label: 'Sometimes for major changes' },
       { v: 3, label: 'Standard practice for every change' }
+    ]},
+// R8/B9 (2026-08-31): 33 items closing the NIST GOVERN/MAP/MEASURE/MANAGE gap
+// rows identified in R1, drafted in R8, reviewed and merged per B9. Each
+// carries dimension (GOVERNANCE_DIMENSIONS bucket) and visibilityTag
+// (VISIBILITY_TAGS, R9) assigned here -- R8 did not specify either, so both
+// are decide-and-document judgment calls made at merge time, not asserted
+// in the original research. visibilityTag is a routing hint only: an item
+// without one (the original 20 above) stays visible to every respondent --
+// see getQuestionsForAssessment in logic.js.
+  { id: 'g6', fn: 'govern', module: 'base', dimension: 'risk-classification', visibilityTag: 'strategic', depths: ['standard','comprehensive'],
+    text: "Does your organization set different levels of scrutiny for different AI tools based on how much risk they carry, or does everything get the same level of review?",
+    options: [
+      { v: 0, label: "Every AI tool gets the same review (or no tools get reviewed)" },
+      { v: 1, label: "Some informal sense of 'this one needs more care,' without documented criteria" },
+      { v: 2, label: "A basic tiering exists (e.g. low/medium/high) but isn't consistently applied" },
+      { v: 3, label: "A documented risk-tolerance policy determines review intensity, and it's applied consistently" }
+    ]},
+  { id: 'g7', fn: 'govern', module: 'base', dimension: 'controls-evidence', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "When you stop using an AI tool, do you have a defined process for retiring it safely?",
+    hint: "Includes revoking access, migrating or deleting data the tool held, and documenting why it was retired.",
+    options: [
+      { v: 0, label: "No process -- tools just stop being used, nothing formal happens" },
+      { v: 1, label: "Access is usually revoked eventually, but nothing is documented" },
+      { v: 2, label: "A basic checklist exists (access, data) but isn't always followed" },
+      { v: 3, label: "A documented offboarding process is followed every time, including data handling and a record of why" }
+    ]},
+  { id: 'g8', fn: 'govern', module: 'base', dimension: 'ownership-accountability', visibilityTag: 'strategic', depths: ['standard','comprehensive'],
+    text: "When decisions get made about which AI tools to adopt or how to govern them, who's in the room?",
+    hint: "NIST's framing here is about diversity of discipline and role as much as demographics -- not just who signs off, who's actually consulted.",
+    options: [
+      { v: 0, label: "One person decides, usually whoever pushed for the tool" },
+      { v: 1, label: "IT or leadership decides, without input from the people who'll actually use it" },
+      { v: 2, label: "Input is gathered informally from a few relevant people before a decision" },
+      { v: 3, label: "A defined cross-functional group (e.g. legal, ops, the affected department, IT/security) reviews before adoption" }
+    ]},
+  { id: 'g9', fn: 'govern', module: 'base', dimension: 'ownership-accountability', visibilityTag: 'operational', depths: ['standard','comprehensive'],
+    text: "Is it clearly defined who is responsible for reviewing AI-generated work before it's used, versus what the AI is trusted to do unsupervised?",
+    options: [
+      { v: 0, label: "Not defined -- people use their own judgment case by case" },
+      { v: 1, label: "A general expectation exists ('always double-check AI output') but nothing specific per tool" },
+      { v: 2, label: "Defined for the highest-visibility use cases only" },
+      { v: 3, label: "Documented per AI use case: what's human-reviewed, what's autonomous, and who's responsible" }
+    ]},
+  { id: 'g10', fn: 'govern', module: 'base', dimension: 'monitoring-response', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "If an employee raises a concern about an AI tool being misused or producing something risky, what happens?",
+    options: [
+      { v: 0, label: "No clear channel -- they'd have to figure out who to tell" },
+      { v: 1, label: "They could mention it to their manager, but there's no expectation it goes further" },
+      { v: 2, label: "There's an informal understanding that concerns get escalated, but it's not written down" },
+      { v: 3, label: "A documented channel exists and employees know raising a concern won't be held against them" }
+    ]},
+  { id: 'g11', fn: 'govern', module: 'base', dimension: 'monitoring-response', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "Do people outside your organization -- customers, clients, the public -- have a way to flag a problem with an AI-driven interaction they had with you?",
+    options: [
+      { v: 0, label: "No dedicated way to do this" },
+      { v: 1, label: "General customer support exists, but AI-specific issues aren't tracked separately" },
+      { v: 2, label: "Feedback is collected but not routed anywhere for review" },
+      { v: 3, label: "A defined channel exists and flagged issues are reviewed by someone responsible for AI governance" }
+    ]},
+  { id: 'g12', fn: 'govern', module: 'base', dimension: 'monitoring-response', visibilityTag: 'strategic', depths: ['comprehensive'],
+    text: "When external feedback about an AI tool does surface a real problem, does it actually change anything?",
+    options: [
+      { v: 0, label: "No process connects feedback to any change" },
+      { v: 1, label: "It might prompt a conversation, but rarely leads to a documented change" },
+      { v: 2, label: "Significant issues sometimes lead to a policy or configuration change" },
+      { v: 3, label: "A defined process routes validated feedback into a decision about the tool or policy, and changes are documented" }
+    ]},
+  { id: 'g13', fn: 'govern', module: 'base', dimension: 'controls-evidence', visibilityTag: 'legal-compliance', depths: ['comprehensive'],
+    text: "If a vendor's AI tool went down, was breached, or was found to be seriously flawed tomorrow, do you have a plan for what happens next?",
+    hint: "Distinct from evaluating a vendor before onboarding (already covered) -- this is about what happens after you're already using it.",
+    options: [
+      { v: 0, label: "No plan -- we'd figure it out if it happened" },
+      { v: 1, label: "We'd probably just stop using it, no documented process" },
+      { v: 2, label: "An informal understanding exists of who'd be involved, not written down" },
+      { v: 3, label: "A documented contingency plan exists, including how quickly we could operate without the tool" }
+    ]},
+  { id: 'm6', fn: 'map', module: 'base', dimension: 'inventory-visibility', visibilityTag: 'operational', depths: ['standard','comprehensive'],
+    text: "Before adopting an AI tool, do you talk to the people who'll actually use it day-to-day about what they need and how they'll use it?",
+    options: [
+      { v: 0, label: "No -- tools are chosen and rolled out without asking end users first" },
+      { v: 1, label: "Sometimes, informally, if someone happens to ask" },
+      { v: 2, label: "Usually asked, but their input isn't documented or systematically considered" },
+      { v: 3, label: "Structured input is gathered from intended users before adoption and factored into the decision" }
+    ]},
+  { id: 'm7', fn: 'map', module: 'base', dimension: 'ownership-accountability', visibilityTag: 'strategic', depths: ['standard','comprehensive'],
+    text: "Does your organization have a clear, written sense of why you're using AI at all -- what it's meant to accomplish, tied to your actual mission or goals?",
+    options: [
+      { v: 0, label: "No -- AI gets adopted tool by tool, without a stated purpose" },
+      { v: 1, label: "There's a general sense of 'we should be using AI' but nothing written" },
+      { v: 2, label: "Some goals exist for specific initiatives, but no overall statement" },
+      { v: 3, label: "A documented statement connects AI use to organizational mission and goals" }
+    ]},
+  { id: 'm8', fn: 'map', module: 'base', dimension: 'monitoring-response', visibilityTag: 'strategic', depths: ['comprehensive'],
+    text: "For the AI tools you're currently using, do you know whether they're actually delivering the value you expected?",
+    hint: "Distinct from checking output accuracy -- this is about whether the tool is worth what it costs, not whether its answers are correct.",
+    options: [
+      { v: 0, label: "No -- tools are adopted and nobody checks back" },
+      { v: 1, label: "A general impression exists, but nothing's been measured" },
+      { v: 2, label: "Value has been assessed for a few high-visibility tools" },
+      { v: 3, label: "Business value is defined at adoption and re-evaluated on a regular basis" }
+    ]},
+  { id: 'm9', fn: 'map', module: 'base', dimension: 'risk-classification', visibilityTag: 'strategic', depths: ['standard','comprehensive'],
+    text: "Has your organization ever explicitly decided and written down how much AI risk it's willing to accept?",
+    hint: "Example: 'we won't use AI for anything that makes a final hiring decision without human sign-off.'",
+    options: [
+      { v: 0, label: "No -- risk tolerance has never been discussed" },
+      { v: 1, label: "Leadership has informal opinions, never written down" },
+      { v: 2, label: "Some limits exist for specific high-visibility use cases" },
+      { v: 3, label: "A documented risk-tolerance statement exists and guides decisions" }
+    ]},
+  { id: 'm10', fn: 'map', module: 'base', dimension: 'inventory-visibility', visibilityTag: 'technical-build', depths: ['standard','comprehensive'],
+    text: "For each AI tool in use, do you know what kind of AI it actually is -- for example, whether it generates new content, classifies or scores things, or makes recommendations?",
+    hint: "This matters because a tool that scores or classifies people carries different risk than one that drafts text.",
+    options: [
+      { v: 0, label: "No -- tools are just 'the AI feature,' without knowing what type" },
+      { v: 1, label: "Roughly understood for the most obvious tools only" },
+      { v: 2, label: "Understood for most tools, not documented anywhere" },
+      { v: 3, label: "Documented per tool: what kind of AI it is and what that implies for risk" }
+    ]},
+  { id: 'm11', fn: 'map', module: 'base', dimension: 'inventory-visibility', visibilityTag: 'technical-build', depths: ['comprehensive'],
+    text: "Do you know the specific situations where an AI tool's output shouldn't be trusted without a human checking it first?",
+    options: [
+      { v: 0, label: "No -- it's assumed the tool is generally reliable" },
+      { v: 1, label: "A vague sense exists that 'AI can be wrong,' nothing specific" },
+      { v: 2, label: "Known for the most obvious failure cases, not written down" },
+      { v: 3, label: "Documented per tool: known limitations and where human review is required" }
+    ]},
+  { id: 'm12', fn: 'map', module: 'base', dimension: 'controls-evidence', visibilityTag: 'operational', depths: ['standard','comprehensive'],
+    text: "Before adopting an AI tool, do you document what specific benefit you expect it to provide?",
+    options: [
+      { v: 0, label: "No -- tools are adopted because they seem useful, nothing written" },
+      { v: 1, label: "An informal reason exists, not written down" },
+      { v: 2, label: "Written for major purchases, not smaller or free tools" },
+      { v: 3, label: "Documented for every tool before adoption, including how you'd know if it worked" }
+    ]},
+  { id: 'm13', fn: 'map', module: 'base', dimension: 'risk-classification', visibilityTag: 'operational', depths: ['standard','comprehensive'],
+    text: "Before adopting an AI tool, do you document the potential downsides -- cost, risk, or what could go wrong -- not just the upside?",
+    options: [
+      { v: 0, label: "No -- only the benefit gets considered" },
+      { v: 1, label: "Downsides get discussed informally, not documented" },
+      { v: 2, label: "Documented for major purchases, not smaller or free tools" },
+      { v: 3, label: "A documented cost/risk assessment is part of every adoption decision" }
+    ]},
+  { id: 'm14', fn: 'map', module: 'base', dimension: 'controls-evidence', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "Is there a written boundary on what an AI tool is approved to be used for, versus uses nobody's actually signed off on?",
+    hint: "Example: approved for drafting internal memos, not approved for external communications.",
+    options: [
+      { v: 0, label: "No boundary -- people use tools however they find useful" },
+      { v: 1, label: "An informal, unwritten sense of appropriate use exists" },
+      { v: 2, label: "Scope is defined for the highest-risk tools only" },
+      { v: 3, label: "Every approved tool has a documented, specific scope of intended use" }
+    ]},
+  { id: 'm15', fn: 'map', module: 'base', dimension: 'controls-evidence', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "Do the people using a given AI tool actually know how to use it well -- its quirks, its failure modes, how to get reliable results from it?",
+    hint: "Distinct from general AI-use training -- this is tool-specific competence, not general awareness.",
+    options: [
+      { v: 0, label: "No -- people are handed the tool with no tool-specific guidance" },
+      { v: 1, label: "People figure it out on their own over time" },
+      { v: 2, label: "Informal tips get shared, nothing structured" },
+      { v: 3, label: "Tool-specific guidance or training is provided before people are expected to use it independently" }
+    ]},
+  { id: 'm16', fn: 'map', module: 'base', dimension: 'ownership-accountability', visibilityTag: 'operational', depths: ['standard','comprehensive'],
+    text: "For each AI tool, is there a defined point where a human is required to review or approve before the output is used?",
+    options: [
+      { v: 0, label: "No defined checkpoints -- use of AI output is left to individual judgment" },
+      { v: 1, label: "A general 'someone should check' expectation exists, not specific" },
+      { v: 2, label: "Checkpoints exist for the most visible or highest-stakes tools" },
+      { v: 3, label: "Every tool has a documented human-review checkpoint appropriate to its risk level" }
+    ]},
+  { id: 'm17', fn: 'map', module: 'base', dimension: 'controls-evidence', visibilityTag: 'technical-build', depths: ['comprehensive'],
+    text: "For AI tools built from multiple pieces -- your own workflow, plus a vendor's model, plus maybe a plugin or integration -- do you know where the actual risk controls live?",
+    hint: "Example: does your organization apply its own access controls on top of what the vendor provides, or rely entirely on the vendor?",
+    options: [
+      { v: 0, label: "No -- we assume the vendor handles it and don't check" },
+      { v: 1, label: "A general assumption exists, never verified" },
+      { v: 2, label: "Verified for major tools, not for smaller integrations" },
+      { v: 3, label: "Documented per tool: which controls are the vendor's responsibility and which are ours" }
+    ]},
+  { id: 'm18', fn: 'map', module: 'base', dimension: 'monitoring-response', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "Beyond a one-time review at adoption, do you periodically re-check whether an AI tool is still having the impact you expected -- positive or negative?",
+    hint: "Distinct from the external-feedback questions above -- this is your own scheduled internal check-in, not waiting for someone outside to complain.",
+    options: [
+      { v: 0, label: "No -- impact is assessed once, if at all, and never revisited" },
+      { v: 1, label: "Revisited only if something goes wrong" },
+      { v: 2, label: "Revisited for major tools on an ad hoc basis" },
+      { v: 3, label: "A scheduled, recurring check-in reassesses impact for tools in active use" }
+    ]},
+  { id: 'me6', fn: 'measure', module: 'base', dimension: 'monitoring-response', visibilityTag: 'technical-build', depths: ['comprehensive'],
+    text: "When you check whether an AI tool is working as expected, do you focus on the risks that matter most, or just whatever's easy to check?",
+    hint: "Distinct from the existing me1 (general output-quality checks) -- this is specifically about whether your checking is prioritized toward the tool's biggest risks, not just any convenient measure of quality.",
+    options: [
+      { v: 0, label: "Nothing is specifically measured -- no metrics defined" },
+      { v: 1, label: "Whatever's easiest to check gets checked, not necessarily the highest-risk aspects" },
+      { v: 2, label: "We know which risks matter most but haven't built specific metrics around them" },
+      { v: 3, label: "Specific metrics are defined and tracked, starting with the tool's most significant risks" }
+    ]},
+  { id: 'me7', fn: 'measure', module: 'base', dimension: 'controls-evidence', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "Who checks whether an AI tool is working safely and as intended -- the same person who set it up, or someone independent of that decision?",
+    hint: "'Independent' doesn't require an outside auditor at SMB scale -- someone internal who wasn't involved in choosing or configuring the tool is enough to count.",
+    options: [
+      { v: 0, label: "Only the person who set up or champions the tool checks on it" },
+      { v: 1, label: "Occasionally someone else looks at it, informally" },
+      { v: 2, label: "A different person reviews it periodically, but not on a defined schedule" },
+      { v: 3, label: "Someone independent of the original adoption decision reviews it on a regular, defined schedule" }
+    ]},
+  { id: 'me8', fn: 'measure', module: 'base', dimension: 'monitoring-response', visibilityTag: 'technical-build', depths: ['comprehensive'],
+    text: "Is an AI tool's potential for causing harm -- giving dangerous advice, an unsafe recommendation, and so on -- checked on an ongoing basis, or assumed to be fine after initial setup?",
+    options: [
+      { v: 0, label: "Never specifically checked for safety, only for general accuracy" },
+      { v: 1, label: "Checked once at adoption, not since" },
+      { v: 2, label: "Checked occasionally, no set schedule" },
+      { v: 3, label: "Checked on a regular, defined schedule with a documented process" }
+    ]},
+  { id: 'me9', fn: 'measure', module: 'base', dimension: 'monitoring-response', visibilityTag: 'technical-build', depths: ['comprehensive'],
+    text: "For AI tools that can take actions in your systems or handle content from outside your organization, have you assessed whether they could be manipulated into doing something they shouldn't?",
+    hint: "This is an active, current risk category -- 'prompt injection' is the industry term for it. A useful test from current security industry guidance (OWASP, 2026): does the tool have (1) access to sensitive data, (2) exposure to content from outside your organization, and (3) the ability to communicate or take action externally? A tool meeting all three of those should require a human-approval step before it acts; meeting only one or two is lower risk.",
+    options: [
+      { v: 0, label: "Never assessed -- the tool is used without this consideration" },
+      { v: 1, label: "A general awareness exists, nothing formally assessed" },
+      { v: 2, label: "Assessed for the highest-exposure tools only" },
+      { v: 3, label: "Every tool with meaningful data access and outside-content or action exposure has been assessed, with a human-approval step for higher-risk combinations" }
+    ]},
+  { id: 'me10', fn: 'measure', module: 'base', dimension: 'risk-classification', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "Has your organization considered the environmental footprint -- energy or compute use -- of the AI tools you rely on, even at a basic level?",
+    hint: "Lower-stakes than the other measurement questions for most SMBs deploying third-party tools rather than training their own models -- but a growing number of vendors publish this data, and some clients and funders are starting to ask about it.",
+    options: [
+      { v: 0, label: "Never considered" },
+      { v: 1, label: "Aware it's a consideration, nothing looked into" },
+      { v: 2, label: "Looked into it for a specific reason (e.g. a client or funder asked), not tracked on an ongoing basis" },
+      { v: 3, label: "Factored into vendor selection and periodically reviewed" }
+    ]},
+  { id: 'me11', fn: 'measure', module: 'base', dimension: 'monitoring-response', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "For AI use cases where you don't have a clean, obvious way to measure whether something's going wrong -- subtle bias in written content, tone problems, nuanced judgment calls -- do you track those risks a different way than the ones you can easily measure?",
+    hint: "Some risks don't have an obvious metric. The question is whether you have any tracking approach for those, not whether you have a clean number.",
+    options: [
+      { v: 0, label: "Hard-to-measure risks aren't tracked at all -- only what's easy to check gets checked" },
+      { v: 1, label: "Acknowledged informally, no tracking approach" },
+      { v: 2, label: "Tracked for the highest-visibility case only" },
+      { v: 3, label: "A defined approach exists for tracking risks that don't have a clean metric -- periodic spot-checks, structured review, or similar" }
+    ]},
+  { id: 'me12', fn: 'measure', module: 'base', dimension: 'monitoring-response', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "When you decide what to actually check about an AI tool's performance, do people who understand the specific use case -- not just the tool itself -- help decide what gets measured?",
+    hint: "Distinct from me13 below: this is about designing what gets measured, before you have results. me13 is about checking the results afterward.",
+    options: [
+      { v: 0, label: "What gets checked is generic, not tailored to the specific use case" },
+      { v: 1, label: "Occasionally informed by someone with relevant context" },
+      { v: 2, label: "Usually informed by relevant expertise for major tools" },
+      { v: 3, label: "What's measured is defined in consultation with people who understand the specific deployment context" }
+    ]},
+  { id: 'me13', fn: 'measure', module: 'base', dimension: 'monitoring-response', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "After you've checked an AI tool's performance, does someone with relevant expertise confirm the results actually reflect what's happening -- or do the numbers stand on their own?",
+    hint: "Distinct from me12 above: that's about designing the measurement itself; this is about validating what it found.",
+    options: [
+      { v: 0, label: "Results aren't reviewed by anyone beyond whoever ran the check" },
+      { v: 1, label: "Occasionally discussed with someone else, informally" },
+      { v: 2, label: "Reviewed with relevant expertise for major tools only" },
+      { v: 3, label: "Results are routinely reviewed with people who have context to confirm they reflect reality" }
+    ]},
+  { id: 'me14', fn: 'measure', module: 'base', dimension: 'monitoring-response', visibilityTag: 'operational', depths: ['comprehensive'],
+    text: "Over time, can you point to specific evidence that an AI tool's performance has gotten better or worse -- or is 'how it's doing' just a general impression?",
+    options: [
+      { v: 0, label: "No tracking over time -- just a general sense of whether it's still useful" },
+      { v: 1, label: "Noticed informally if something clearly breaks" },
+      { v: 2, label: "Tracked for the highest-visibility tools only" },
+      { v: 3, label: "Performance is tracked over time with specific, comparable data points" }
+    ]},
+  { id: 'ma6', fn: 'manage', module: 'base', dimension: 'risk-classification', visibilityTag: 'strategic', depths: ['comprehensive'],
+    text: "When you know an AI tool carries a real risk, does the amount of attention or resources you put toward managing it actually match how serious that risk is?",
+    hint: "NIST's own Playbook guidance here is specifically about proportional resourcing: higher-risk systems should get more oversight attention, and that allocation decision should be documented, not assumed.",
+    options: [
+      { v: 0, label: "Resources and attention aren't allocated by risk level -- everything gets roughly the same amount (or none)" },
+      { v: 1, label: "Higher-risk tools informally get more attention, not documented or consistent" },
+      { v: 2, label: "A rough prioritization exists for the most visible risks" },
+      { v: 3, label: "Resource and oversight allocation is explicitly matched to documented risk level, and reviewed periodically" }
+    ]},
+  { id: 'ma7', fn: 'manage', module: 'base', dimension: 'controls-evidence', visibilityTag: 'legal-compliance', depths: ['comprehensive'],
+    text: "After you've done what you can to reduce an AI tool's risk, is what's left over -- the risk you're choosing to live with -- written down anywhere, and would the people affected by it know about it?",
+    hint: "Every mitigation leaves some risk behind. NIST's Playbook is specific here: residual risk should be documented as accepted, transferred, or minimally mitigated, and disclosed to whoever is affected downstream -- not just silently absorbed.",
+    options: [
+      { v: 0, label: "Not tracked -- once a mitigation is in place, remaining risk isn't discussed" },
+      { v: 1, label: "Understood informally by whoever set up the tool, not written down" },
+      { v: 2, label: "Documented for the highest-risk tools only" },
+      { v: 3, label: "Documented for every tool with a real risk, and disclosed to affected downstream users where relevant" }
+    ]},
+  { id: 'ma8', fn: 'manage', module: 'base', dimension: 'monitoring-response', visibilityTag: 'technical-build', depths: ['comprehensive'],
+    text: "Beyond initial setup, do you have active mechanisms -- monitoring, access controls, a feedback channel -- that keep an AI tool performing safely as your use of it evolves?",
+    hint: "Distinct from the existing m8 and m18 in the item bank: those ask whether you periodically check if a tool is still worth it or having the impact you expected -- a review-cadence question. This is about whether active technical/operational mechanisms exist day to day to sustain safe performance -- monitoring, controls, and a feedback loop, not a scheduled check-in.",
+    options: [
+      { v: 0, label: "No ongoing mechanisms -- the tool runs as originally configured, unmonitored" },
+      { v: 1, label: "Informal awareness if something looks wrong, no active mechanism" },
+      { v: 2, label: "Basic monitoring or a feedback channel exists for the highest-visibility tools" },
+      { v: 3, label: "Defined monitoring, access controls, and a feedback mechanism are in place and maintained for tools in active use" }
     ]}
 ];
 
@@ -592,6 +884,39 @@ export const REC_TITLES = {
   ma3: 'Disclose when customers are interacting with AI',
   ma4: 'Create an appeal path for AI decisions',
   ma5: 'Trigger reviews after significant changes',
+  g6: "Set risk-based review levels for AI tools",
+  g7: "Create an AI tool decommissioning process",
+  g8: "Build a cross-functional AI adoption review",
+  g9: "Define human-review vs. autonomous AI use per tool",
+  g10: "Create a safe channel for AI-risk concerns",
+  g11: "Add a way for outsiders to flag AI-driven problems",
+  g12: "Connect external feedback to real policy changes",
+  g13: "Build a vendor AI failure contingency plan",
+  m6: "Consult end users before adopting AI tools",
+  m7: "Write a mission-linked rationale for AI use",
+  m8: "Re-evaluate whether AI tools deliver expected value",
+  m9: "Document your organization's AI risk tolerance",
+  m10: "Document what kind of AI each tool actually is",
+  m11: "Document known limitations per AI tool",
+  m12: "Document expected benefit before adopting a tool",
+  m13: "Document potential costs and risks before adopting",
+  m14: "Define an approved scope of use per tool",
+  m15: "Provide tool-specific AI usage guidance",
+  m16: "Define human-review checkpoints per tool",
+  m17: "Clarify which risk controls are vendor vs. internal",
+  m18: "Schedule recurring impact check-ins per tool",
+  me6: "Prioritize AI risk metrics by significance",
+  me7: "Add independent review of AI tool performance",
+  me8: "Schedule regular AI safety risk checks",
+  me9: "Assess AI tools for manipulation/security risk",
+  me10: "Consider AI environmental footprint in vendor choice",
+  me11: "Track hard-to-measure AI risks",
+  me12: "Involve context experts in designing AI measurement",
+  me13: "Validate AI measurement results with relevant experts",
+  me14: "Track AI tool performance over time",
+  ma6: "Match AI oversight effort to documented risk level",
+  ma7: "Document and disclose residual AI risk",
+  ma8: "Build ongoing monitoring for deployed AI tools",
   // Nonprofit
   np1: 'Transition off personal-account AI tools',
   np2: 'Brief the board on AI adoption and risk',
@@ -607,8 +932,67 @@ export const REC_TITLES = {
   y6: 'Track and review youth-facing AI use'
 };
 
-// Module-specific recommendation bodies (base uses generic template; modules get specifics)
+// Recommendation bodies. Base (NIST core) questions got real per-item
+// entries in B9 (2026-08-31) -- previously fell through to the generic
+// template in buildRecommendations() (logic.js), now only used as a
+// backstop for a question id with no entry at all. Module-specific
+// (nonprofit/youth) entries below are unchanged from B9's predecessor.
 export const REC_BODIES = {
+  // Base -- original 20 (g1-g5, m1-m5, me1-me5, ma1-ma5)
+  g1: "A written AI-use policy is the baseline artifact regulators, insurers, and customers expect to see first. Keep it concrete -- which tools are approved, what data can't be entered, who to ask about a new tool -- and review it at least annually as tools change.",
+  g2: "Naming a specific, documented owner closes the accountability gap this project's own research found most common: a majority of organizations report internal conflict over who owns AI governance, and most people handed the responsibility get it without real authority to act. A named owner with documented scope turns 'someone should handle this' into something that actually happens.",
+  g3: "A lightweight approval step before a new AI tool goes into use -- even a one-page checklist -- catches the highest-risk adoptions while they're still easy to redirect or decline, instead of after they're already embedded in a workflow.",
+  g4: "One-time onboarding mentions don't hold up as tools and risks change. Structured, role-specific training, updated as new tools and failure modes emerge, is what actually changes day-to-day behavior -- not just a record that AI was discussed once.",
+  g5: "AI risk belongs on the same cadence as other enterprise risks leadership already tracks. Dedicated agenda time, even quarterly, keeps governance proactive instead of something only discussed after something has already gone wrong.",
+  m1: "You can't govern what you can't see. A current, reviewed inventory of every AI tool in use -- including AI features built into software you already pay for, the most common blind spot -- is the foundation every other governance activity in this report depends on.",
+  m2: "Identifying who could be harmed by a mistake, per use case, turns an abstract 'AI risk' conversation into something specific enough to act on, and it's the direct input this report's risk-tiering and oversight recommendations depend on.",
+  m3: "Classifying use cases by risk tier -- low for drafting, high for hiring or credit decisions -- lets you concentrate oversight where it actually matters, instead of spreading the same shallow review across every tool equally.",
+  m4: "Knowing what data an AI tool can access is a prerequisite for every downstream data-protection and vendor-risk decision. A tool with broad, unreviewed data access is a bigger exposure than its everyday use might suggest.",
+  m5: "Vendor security questionnaires that don't ask AI-specific questions -- training-data use, model update cadence, human-review guarantees -- miss the risks unique to AI tools. A structured review that adds those questions closes a real, common gap.",
+  me1: "Spot-checking only when something looks wrong catches the obvious failures, not the quiet ones. A structured review process with documented metrics gives an actual signal on accuracy over time, not just an impression.",
+  me2: "An incident log, even an informal one, turns 'we've had some issues' into a pattern you can actually manage. Without tracking, the same failure mode can recur multiple times before anyone notices it's a pattern at all.",
+  me3: "Bias in AI outputs that affect people -- hiring, pricing, customer service -- carries real legal exposure under regimes like NYC Local Law 144 and Illinois's AI Video Interview Act. Regular structured testing, not just informal spot checks, is what a defensible process looks like.",
+  me4: "Systematic logging of AI decisions that affect customers or employees, with a real retention policy, is the evidence base you'd need if a decision were ever challenged. Keeping records only when someone complains means you have nothing for the cases nobody complained about.",
+  me5: "Tools and their risk profiles change after adoption -- a vendor updates its model, a new regulation applies, usage expands into new contexts. Re-evaluating on a set cadence, not just once at adoption, keeps your understanding of a tool current.",
+  ma1: "A documented, tested incident response plan is the difference between a fast, controlled response and an improvised one the first time something goes wrong. Testing it at least once confirms it actually works under pressure, not just on paper.",
+  ma2: "If disabling or rolling back an AI tool would take days, that's a real operational risk hiding behind normal-looking day-to-day use. A documented, fast rollback process limits how much damage a bad AI output can do before it's stopped.",
+  ma3: "Disclosing AI involvement by default, as policy, is both an emerging legal requirement in some jurisdictions and a straightforward trust-building move. Inconsistent, case-by-case disclosure tends to surface as a problem only when someone notices its absence.",
+  ma4: "A documented appeal path gives someone affected by an AI-driven decision a real way to contest it -- general customer support isn't the same thing, and its absence is a common driver of the 'black box' complaint AI governance frameworks exist to address.",
+  ma5: "Standard practice is reviewing your AI risk posture after every significant change -- a new tool, new use case, new regulation, or major incident -- not waiting until something has already gone wrong to look again.",
+  // Base -- R8's 33 GOVERN/MAP/MEASURE/MANAGE gap-fill items (B9)
+  g6: "A documented risk-tolerance policy that determines review intensity -- not the same level of scrutiny for every tool -- lets you concentrate limited governance time on the AI use cases that actually carry the most risk, consistent with how NIST's GOVERN 1.3 frames risk-based resourcing.",
+  g7: "AI tools accumulate access and data over time even after people stop actively using them. A documented offboarding process -- revoking access, handling the data the tool held, recording why it was retired -- closes a gap that's easy to miss because nothing dramatic happens when it's skipped.",
+  g8: "NIST's own framing here is about diversity of discipline and role, not just demographics -- who's actually consulted before an AI adoption decision, not just who signs off. A defined cross-functional review (legal, ops, the affected department, IT/security) catches risks a single decision-maker is likely to miss.",
+  g9: "A general 'always double-check AI output' expectation doesn't tell anyone specifically what they're responsible for. Documenting, per AI use case, what's human-reviewed versus what's trusted to run autonomously makes accountability enforceable rather than aspirational.",
+  g10: "Employees are often the first to notice an AI tool being misused or producing something risky -- but only if they know where to raise it and trust that doing so won't be held against them. A documented channel, not just an informal 'mention it to your manager,' is what actually makes that reporting happen.",
+  g11: "Customers and the public interacting with your AI-driven systems need a real way to flag a problem. General customer support that doesn't route AI-specific issues anywhere for review effectively has no channel at all, even if it looks like one exists.",
+  g12: "A reporting channel only matters if something happens downstream of it. Whether validated external feedback actually leads to a documented policy or configuration change is what separates a real feedback loop from a suggestion box nobody reads.",
+  g13: "Vendor AI tools fail, get breached, or turn out to be seriously flawed -- and evaluating a vendor before onboarding doesn't cover what happens after you're already dependent on them. A documented contingency plan, including how quickly you could operate without the tool, keeps a vendor failure from becoming your own emergency.",
+  m6: "Rolling out a tool without asking the people who'll actually use it day-to-day is a common source of both poor adoption and unanticipated risk. Structured input from intended users, gathered before the decision and actually factored into it, surfaces problems a top-down rollout would miss.",
+  m7: "AI adoption without a stated purpose tends to sprawl tool by tool, with no shared standard for whether any of it is working. A documented statement connecting AI use to your actual mission or goals gives every other governance decision -- what to adopt, what to retire -- something concrete to be measured against.",
+  m8: "Adopting a tool and never checking whether it delivered the value you expected is how organizations end up paying for AI that isn't earning its keep -- distinct from whether its outputs are accurate. Re-evaluating business value on a regular cadence, not just once, keeps that assumption honest.",
+  m9: "An explicit, written risk-tolerance statement -- for example, 'we won't use AI for a final hiring decision without human sign-off' -- turns leadership's informal opinions about acceptable AI risk into something that actually guides day-to-day decisions, and it's the input this tool's own risk-tiering depends on.",
+  m10: "Knowing what kind of AI a tool actually is -- whether it generates content, classifies or scores people, or makes recommendations -- matters because a scoring or classification tool carries meaningfully different risk than one that drafts text. Documenting this per tool is also the first input this tool's own use-case risk tiering needs to work.",
+  m11: "Assuming an AI tool is generally reliable, without documenting the specific situations where its output shouldn't be trusted unchecked, leaves people guessing case by case. Documented known limitations per tool, not just a vague sense that 'AI can be wrong,' is what actually informs when human review matters most.",
+  m12: "Adopting a tool because it seems useful, without documenting the specific benefit you expect, makes it impossible to later tell whether it delivered. Writing down the expected benefit -- and how you'd know if it worked -- at adoption is what makes a later value re-evaluation possible at all.",
+  m13: "Considering only the upside of an AI tool and skipping the downside -- cost, risk, what could go wrong -- is an easy blind spot when a tool is free or informally adopted. A documented cost/risk assessment as part of every adoption decision, not just major purchases, closes that gap.",
+  m14: "Without a written boundary on what an AI tool is approved for, use tends to expand informally into contexts nobody actually signed off on -- for example, a tool approved for internal drafting quietly being used for external communications. A documented scope per tool keeps actual use aligned with what was reviewed.",
+  m15: "General AI-use training doesn't teach anyone a specific tool's quirks, failure modes, or how to get reliable results from it. Tool-specific guidance before people are expected to use a tool independently is what actually builds operational competence, distinct from organization-wide awareness training.",
+  m16: "A general expectation that 'someone should check' AI output isn't the same as a defined checkpoint in the actual workflow. Every tool having a documented human-review point, sized to its risk level, turns oversight from an assumption into a real step in the process.",
+  m17: "For AI tools assembled from multiple pieces -- your own workflow, a vendor's model, a plugin or integration -- assuming the vendor handles security without verifying it is a common, easy-to-miss gap. Documenting which risk controls are the vendor's responsibility and which are yours clarifies where you're actually exposed.",
+  m18: "A one-time review at adoption doesn't tell you whether a tool is still having the impact you expected months or years later. A scheduled, recurring internal check-in, distinct from waiting for external complaints, catches drift before it becomes a bigger problem.",
+  me6: "Checking whatever's easiest to measure, rather than what actually carries the most risk, gives a false sense of oversight. Defining specific metrics that start with a tool's most significant risks, not just its most convenient ones, is what NIST's MEASURE 1.1 asks for and what makes measurement actually useful.",
+  me7: "When the same person who set up or champions a tool is also the one checking whether it's working safely, that's not independent review -- it's a conflict of interest, even an unintentional one. At SMB scale, 'independent' just means someone who wasn't involved in the adoption decision, reviewing on a defined schedule.",
+  me8: "Checking a tool's safety once at setup and never again leaves you blind to how its risk profile changes as usage grows or the underlying model updates. Regular, scheduled safety checks, not just general accuracy checks, are what actually catch a tool's potential for harm before it causes it.",
+  me9: "This is a live, current risk category, not a hypothetical one -- 'prompt injection' is the industry term. A practical test from current security guidance (OWASP, 2026): a tool with sensitive-data access, exposure to outside content, and the ability to take action externally should require human approval before acting; meeting only one or two of those is lower risk. Assessing tools against this before assuming they're safe closes a real, current gap.",
+  me10: "Lower-stakes than most other measurement gaps for an SMB deploying third-party tools rather than training its own models -- but a growing number of vendors publish environmental-impact data, and some clients and funders are starting to ask. Factoring it into vendor selection, even lightly, is a low-cost way to be ready for that question.",
+  me11: "Not every AI risk has a clean number to track -- subtle bias in tone, nuanced judgment calls. Assuming those risks don't need tracking just because they're hard to measure is a gap; a defined approach, even periodic spot-checks or structured review, is better than tracking only what's convenient.",
+  me12: "Measurement designed without input from people who understand the specific use case tends to check the wrong things well. Involving relevant expertise in deciding what gets measured, before you have results, is distinct from validating results afterward -- and both matter.",
+  me13: "Numbers that stand on their own, without anyone with relevant context confirming they reflect reality, can quietly mislead. Routinely reviewing measurement results with people who have that context is what validates whether a tool is actually performing as intended, not just producing numbers that look fine.",
+  me14: "A general impression of whether a tool 'seems to be doing okay' isn't the same as being able to point to specific evidence of improvement or decline over time. Tracking performance with comparable data points is what makes any later re-evaluation more than a gut check.",
+  ma6: "Treating every AI risk with the same amount of attention -- or none -- misallocates limited governance resources. NIST's own Playbook guidance is specific: resourcing and oversight attention should be explicitly matched to documented risk level, and that allocation should be reviewed periodically, not just assumed once.",
+  ma7: "Every mitigation leaves some risk behind, and silently absorbing it is different from documenting it. NIST's Playbook is specific here too: residual risk should be recorded as accepted, transferred, or minimally mitigated, and disclosed to whoever downstream is actually affected by it -- not just understood informally by whoever set up the tool.",
+  ma8: "A tool that runs exactly as originally configured, with no active monitoring, access controls, or feedback mechanism, tends to drift from safe as your use of it evolves. This is distinct from a scheduled review check-in -- it's about whether day-to-day technical and operational mechanisms actually exist to sustain safe performance in between those check-ins.",
   np1: 'Personal-account AI tools cannot be audited, revoked, or monitored by your organization. Nonprofit-tier enterprise accounts from Google (free for up to 2,000 users), Canva (free for up to 50 users), or Microsoft (free Copilot Chat with existing M365) close this gap at little to no cost. This is often the highest-ROI single move a nonprofit can make.',
   np2: 'Board oversight is a governance obligation for 501(c)(3) organizations, and AI now sits alongside cybersecurity and financial risk as a topic requiring board-level attention. A single structured briefing covering current AI use, risks, and controls establishes the oversight baseline auditors and funders increasingly expect.',
   np3: 'Donor data combined with giving amounts is one of the most sensitive data categories a nonprofit holds. Written policy prohibiting entry of donor data into personal-account AI tools, backed by anonymization requirements for any AI-assisted donor communication, is essential.',

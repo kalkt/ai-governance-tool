@@ -1510,3 +1510,114 @@ describe('getVisibilityTagsForRole (B11)', () => {
     });
   });
 });
+
+describe('getQuestionsForAssessment role-based visibility filtering (B8)', () => {
+  const forProfit = { orgType: 'for-profit', servesYouth: false };
+
+  it('is unaffected when no role argument is passed at all, matching pre-B8 behavior exactly', () => {
+    const withoutRoleArg = getQuestionsForAssessment(forProfit, 'comprehensive');
+    const withUndefinedRole = getQuestionsForAssessment(forProfit, 'comprehensive', undefined);
+    expect(withoutRoleArg.map(q => q.id)).toEqual(withUndefinedRole.map(q => q.id));
+    expect(withoutRoleArg.length).toBe(BASE_QUESTIONS.filter(q => q.depths.indexOf('comprehensive') !== -1).length);
+  });
+
+  it('leadership sees the full depth-filtered pool, same as passing no role', () => {
+    const noRole = getQuestionsForAssessment(forProfit, 'comprehensive');
+    const leadership = getQuestionsForAssessment(forProfit, 'comprehensive', { id: 'leadership' });
+    expect(leadership.map(q => q.id)).toEqual(noRole.map(q => q.id));
+  });
+
+  it('always includes items with no visibilityTag, regardless of role/department', () => {
+    const untaggedIds = BASE_QUESTIONS.filter(q => !q.visibilityTag).map(q => q.id);
+    expect(untaggedIds.length).toBeGreaterThan(0); // the original 20 base questions predate R9's tagging pass
+    const financeEmployee = getQuestionsForAssessment(forProfit, 'comprehensive', { id: 'employee', department: 'finance' });
+    const financeIds = financeEmployee.map(q => q.id);
+    untaggedIds.forEach(id => expect(financeIds).toContain(id));
+  });
+
+  it('excludes technical-build and legal-compliance and strategic tagged items for a Finance department respondent, who only gets operational', () => {
+    const financeEmployee = getQuestionsForAssessment(forProfit, 'comprehensive', { id: 'employee', department: 'finance' });
+    const financeIds = financeEmployee.map(q => q.id);
+    expect(financeIds).not.toContain('m10'); // technical-build
+    expect(financeIds).not.toContain('g13'); // legal-compliance
+    expect(financeIds).not.toContain('g6');  // strategic
+    expect(financeIds).toContain('g10'); // operational-tagged
+  });
+
+  it('includes technical-build tagged items for an IT/Engineering department respondent', () => {
+    const itDeptRole = getQuestionsForAssessment(forProfit, 'comprehensive', { id: 'dept-role', department: 'it-engineering' });
+    const itIds = itDeptRole.map(q => q.id);
+    expect(itIds).toContain('m10');
+    expect(itIds).toContain('me9');
+    expect(itIds).not.toContain('g13'); // still no legal-compliance
+  });
+
+  it('includes legal-compliance tagged items for a Legal/Compliance department respondent', () => {
+    const legalRole = getQuestionsForAssessment(forProfit, 'comprehensive', { id: 'employee', department: 'legal' });
+    const legalIds = legalRole.map(q => q.id);
+    expect(legalIds).toContain('g13');
+    expect(legalIds).toContain('ma7');
+    expect(legalIds).not.toContain('m10'); // still no technical-build
+  });
+
+  it('never returns more questions for a restricted role than for no role, at the same depth', () => {
+    const noRole = getQuestionsForAssessment(forProfit, 'comprehensive').length;
+    const restricted = getQuestionsForAssessment(forProfit, 'comprehensive', { id: 'employee', department: 'finance' }).length;
+    expect(restricted).toBeLessThanOrEqual(noRole);
+  });
+});
+
+describe('R8 item-bank merge data integrity (B8/B9, 2026-08-31)', () => {
+  const R8_IDS = ['g6','g7','g8','g9','g10','g11','g12','g13',
+    'm6','m7','m8','m9','m10','m11','m12','m13','m14','m15','m16','m17','m18',
+    'me6','me7','me8','me9','me10','me11','me12','me13','me14',
+    'ma6','ma7','ma8'];
+  const dimensionIds = GOVERNANCE_DIMENSIONS.map(d => d.id);
+
+  it('merged exactly 33 new items into BASE_QUESTIONS, on top of the original 20', () => {
+    expect(BASE_QUESTIONS.length).toBe(53);
+    R8_IDS.forEach(id => {
+      expect(BASE_QUESTIONS.some(q => q.id === id)).toBe(true);
+    });
+  });
+
+  it('has no duplicate ids in BASE_QUESTIONS after the merge', () => {
+    const ids = BASE_QUESTIONS.map(q => q.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('every R8 item has a valid GOVERNANCE_DIMENSIONS dimension assigned', () => {
+    R8_IDS.forEach(id => {
+      const q = BASE_QUESTIONS.find(bq => bq.id === id);
+      expect(dimensionIds).toContain(q.dimension);
+    });
+  });
+
+  it('every R8 item that declares a visibilityTag uses a real VISIBILITY_TAGS value', () => {
+    R8_IDS.forEach(id => {
+      const q = BASE_QUESTIONS.find(bq => bq.id === id);
+      if (q.visibilityTag) expect(VISIBILITY_TAGS).toContain(q.visibilityTag);
+    });
+  });
+
+  it('every base question (original 20 + R8\'s 33) has both a REC_TITLES and a REC_BODIES entry -- no more generic-template fallback for base', () => {
+    BASE_QUESTIONS.forEach(q => {
+      expect(REC_TITLES[q.id]).toBeTruthy();
+      expect(REC_BODIES[q.id]).toBeTruthy();
+    });
+  });
+
+  it('every R8 item has at least one depth and every depth value is one of the three real depths', () => {
+    const realDepths = ['quick', 'standard', 'comprehensive'];
+    R8_IDS.forEach(id => {
+      const q = BASE_QUESTIONS.find(bq => bq.id === id);
+      expect(q.depths.length).toBeGreaterThan(0);
+      q.depths.forEach(d => expect(realDepths).toContain(d));
+    });
+  });
+
+  it('MANAGE 1.1 and 2.1 were deliberately not drafted here -- ma1-ma5 (original) plus ma6-ma8 (R8) is 8 MANAGE items total, not 10', () => {
+    const manageIds = BASE_QUESTIONS.filter(q => q.fn === 'manage').map(q => q.id);
+    expect(manageIds.length).toBe(8);
+  });
+});
