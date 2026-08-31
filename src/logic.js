@@ -11,7 +11,13 @@ import {
   REC_TITLES,
   REC_BODIES,
   TOOL_MASTER_LIST,
-  GOVERNANCE_DIMENSIONS
+  GOVERNANCE_DIMENSIONS,
+  RISK_CRITERIA,
+  RISK_TIERS,
+  SMALL_ORG_SIZE_BANDS,
+  OVERSIGHT_EXPECTATIONS,
+  REGULATORY_INDUSTRY_NOTES,
+  VISIBILITY_TAGS
 } from './data.js';
 
 export function getApplicableModules(profile) {
@@ -127,6 +133,273 @@ export function computeTier(overall) {
     key: 'high', cssClass: 'tier-high', label: 'Higher risk',
     desc: 'Governance is largely informal or absent. Prioritize the basics before adopting more AI tools or expanding sensitive use cases.'
   };
+}
+
+// ============================================================================
+// B6: per-USE-CASE risk tiering (backlog SS1.4.6). Distinct from computeTier()
+// above -- that buckets the ORGANIZATION's overall readiness score into 3
+// bands; this classifies one specific AI use case/tool into 4 tiers. Not
+// wired into the wizard flow yet (no UI asks "describe a specific use case"
+// today) -- deliberately scoped as a pure, well-tested function here, per
+// this item's own instruction; wiring it into the assessment flow is B13's
+// job (New AI Tool Adoption assessment type), which depends on this module
+// existing first.
+//
+// Design (decide-and-document -- SS1.4.6 names the four tiers, the seven
+// criteria, and the Annex III trigger, but not an exact combination formula):
+// Annex III domain membership GATES which pair of tiers a use case is even
+// eligible for -- touching any Annex III domain routes it into Tier 1/2
+// territory; not touching one caps it at Tier 3/4, regardless of how severe
+// the seven criteria look. This directly mirrors SS1.4.6's own framing
+// ("does this tool's use touch any of these areas routes straight into
+// Tier 1/2 scrutiny") rather than averaging Annex III membership in as an
+// eighth criterion. WITHIN whichever pair the gate selects, the seven
+// criteria's unweighted average (0-3 scale, risk-forward polarity -- see
+// RISK_CRITERIA's own comment in data.js) splits it at the scale's midpoint
+// (1.5): >=1.5 takes the more severe tier of the pair (Tier 1 or Tier 3),
+// below it takes the less severe one (Tier 2 or Tier 4). Equal weighting
+// across the seven criteria is a deliberate default in the absence of any
+// specified differential weights (unlike GOVERNANCE_DIMENSIONS' explicit
+// 20/20/20/25/15) -- flagged here as a reasonable starting point, not
+// asserted as the only valid scheme.
+export function classifyUseCaseRisk(useCaseAnswers, companySize) {
+  var domainIds = (useCaseAnswers && useCaseAnswers.annexIiiDomainIds) || [];
+  var inAnnexIIIDomain = domainIds.length > 0;
+
+  var sum = 0, count = 0;
+  RISK_CRITERIA.forEach(function(c) {
+    var v = useCaseAnswers ? useCaseAnswers[c] : undefined;
+    if (typeof v === 'number') {
+      sum += v;
+      count++;
+    }
+  });
+  // No criteria answered at all defaults to the least-severe end (0) rather
+  // than asserting risk from an absence of evidence -- mirrors B5's gating
+  // rule skipping when there's no Ownership & Accountability data to act on.
+  var composite = count === 0 ? 0 : sum / count;
+
+  var tierKey;
+  if (inAnnexIIIDomain) {
+    tierKey = composite >= 1.5 ? 'tier1' : 'tier2';
+  } else {
+    tierKey = composite >= 1.5 ? 'tier3' : 'tier4';
+  }
+
+  var tier = RISK_TIERS.find(function(t) { return t.key === tierKey; });
+
+  return {
+    tier: tier,
+    compositeScore: Math.round(composite * 100) / 100,
+    annexIiiDomainIds: domainIds,
+    oversight: getOversightExpectation(tierKey, companySize)
+  };
+}
+
+// (risk tier x company size band) oversight/validation lookup, per SS1.4.6's
+// own instruction ("a lookup... not a single universal column"). Tier 2 and
+// Tier 3 share one merged entry for orgs under ~200 employees (SMALL_ORG_
+// SIZE_BANDS, data.js) -- everywhere else, tier and size band are looked up
+// directly. Returns null for an unrecognized tier/size combination rather
+// than guessing.
+export function getOversightExpectation(tierKey, companySize) {
+  if ((tierKey === 'tier2' || tierKey === 'tier3') && SMALL_ORG_SIZE_BANDS.indexOf(companySize) !== -1) {
+    return OVERSIGHT_EXPECTATIONS['tier2-3-small'];
+  }
+  var bySize = OVERSIGHT_EXPECTATIONS[tierKey];
+  return (bySize && bySize[companySize]) || null;
+}
+
+// ============================================================================
+// B10: Regulatory Exposure, Tool Portfolio Risk, Framework Coverage -- three
+// dimensions reported SEPARATELY per backlog SS1.4.5, never averaged into
+// computeScores()'s Governance Maturity `overall` (B5, untouched by this
+// item). No dedicated report section exists for these yet; wiring choice is
+// documented where each is called from src/ui.js.
+// ============================================================================
+
+// Regulatory Exposure: composite of jurisdiction (region), industry, data
+// types (regulated[]), and customer type from state.profile -- all already
+// captured today, no new profile fields needed. aiMaturity is carried through
+// as context (it changes how much real-world exposure a given regulatory
+// finding represents -- "scaled" production use is more exposed than
+// "exploring" under the identical legal requirement) rather than its own
+// scored factor, since it doesn't change WHICH regulations apply.
+//
+// SOURCING NOTE (decide-and-document, but flagged plainly): this session did
+// not have access to the primary Cowork Project doc
+// `claude/research-r4-r5-r6-regulatory-status.md` referenced for this item --
+// no tool in this Claude Code session can read that doc; only this repo's own
+// files. The EU/Colorado/Canada citations below are instead drawn verbatim
+// from this repo's own canonical backlog file, SS1.5.4 (`ai-governance-tool-
+// backlog.md`), which already records R4/R5/R6's dated findings and is
+// itself the project's designated single source of truth (SS1.7). Nothing
+// below is invented beyond what SS1.5.4 already states; if the primary
+// Cowork doc has finer-grained detail (e.g. specific article citations),
+// this should be reconciled against it directly, which this session could
+// not do.
+//
+// A real, undocumented-until-now scoping gap this citation work surfaced:
+// state.profile.region's 'us' value has no state-level breakdown, so
+// Colorado SB 26-189 exposure can only ever be shown as a conditional
+// caveat ("if you operate in Colorado...") for any 'us' respondent, never a
+// precise yes/no determination -- flagged here and in the backlog rather
+// than silently asserting exposure the profile schema can't actually confirm.
+// Similarly, 'uk' and 'other' regions have no dedicated regulatory research
+// in this project yet (no R-numbered finding covers them) -- rather than
+// inventing one, an honest 'info'-level gap factor is returned for those.
+export function computeRegulatoryExposure(profile) {
+  var factors = [];
+
+  if (profile.region === 'eu') {
+    factors.push({
+      id: 'eu-ai-act', level: 'high',
+      label: 'EU AI Act (via the Digital Omnibus amendment)',
+      detail: 'Formally adopted (Parliament 16 June 2026, Council 29 June 2026). High-risk-system obligations are deferred -- standalone high-risk systems to 2 Dec 2027, high-risk systems embedded in other products to 2 Aug 2028 -- but Article 50 transparency obligations still apply generally from 2 Aug 2026, with a grace period only to 2 Dec 2026 for systems already on the market before then.',
+      source: 'R4, backlog SS1.5.4'
+    });
+  } else if (profile.region === 'us') {
+    factors.push({
+      id: 'us-state-patchwork', level: 'medium',
+      label: 'US state-level AI regulation (jurisdiction not precise below country level)',
+      detail: 'This tool does not currently capture which US state you operate in. If that state is Colorado: SB 26-189 (signed 14 May 2026, repeals SB 24-205) takes effect 1 Jan 2027 "unless delayed by" pending litigation -- a live contingency, not a settled date -- and is narrower than originally proposed (an ADMT/"consequential decisions" framing, AG-enforced only, no private right of action, 60-day cure period). Other states may have their own requirements not tracked by this tool.',
+      source: 'R5, backlog SS1.5.4'
+    });
+  } else if (profile.region === 'ca') {
+    factors.push({
+      id: 'canada-patchwork', level: 'medium',
+      label: 'Canada: no federal AI-specific statute; a real patchwork instead',
+      detail: 'AIDA never became law -- it died with Bill C-27 at prorogation (6 Jan 2025); no Canada AI Act currently exists. The actual current requirements are PIPEDA, Quebec\'s Law 25, the Treasury Board\'s automated-decision directive (for federal government use), and a voluntary code -- not a single comprehensive AI statute.',
+      source: 'R6, backlog SS1.5.4'
+    });
+  } else if (profile.region === 'uk' || profile.region === 'other') {
+    factors.push({
+      id: 'no-dedicated-research', level: 'info',
+      label: 'No dedicated regulatory research completed for this region yet',
+      detail: 'This tool has real, dated regulatory findings for the EU, US (partial -- country-level only), and Canada (R4/R5/R6). No equivalent research exists yet for this region -- this is an honest gap, not a claim that no regulation applies.',
+      source: null
+    });
+  }
+
+  if (profile.industry && REGULATORY_INDUSTRY_NOTES[profile.industry]) {
+    factors.push({
+      id: 'industry-' + profile.industry, level: 'medium',
+      label: 'Industry-specific regulation',
+      detail: REGULATORY_INDUSTRY_NOTES[profile.industry],
+      source: null
+    });
+  }
+
+  var regulatedLevels = { pii: 'medium', phi: 'high', financial: 'medium', 'eu-customers': 'high', 'children-data': 'high' };
+  var regulatedLabels = {
+    pii: 'Handles personally identifiable information',
+    phi: 'Handles health data (PHI) -- HIPAA-relevant',
+    financial: 'Handles financial data',
+    'eu-customers': 'Has EU customers -- GDPR applies',
+    'children-data': 'Handles data about children -- COPPA-relevant for under-13 data'
+  };
+  (profile.regulated || []).forEach(function(r) {
+    if (regulatedLevels[r]) {
+      factors.push({ id: 'data-' + r, level: regulatedLevels[r], label: regulatedLabels[r], detail: regulatedLabels[r], source: null });
+    }
+  });
+
+  if (profile.customerType === 'gov') {
+    factors.push({
+      id: 'gov-customers', level: 'medium',
+      label: 'Government customers -- FedRAMP may be required',
+      detail: 'AI tools sold to or used by US government agencies typically require FedRAMP authorization.',
+      source: null
+    });
+  }
+
+  // 'low' means "checked, nothing regulatory-relevant declared" -- distinct
+  // from 'info', which means "we don't actually know" (the only factor
+  // present is an honest research gap, e.g. an unresearched region).
+  // Asserting 'low' in that case would misrepresent an unresearched gap as a
+  // checked-and-fine finding.
+  var level = 'low';
+  if (factors.some(function(f) { return f.level === 'high'; })) level = 'high';
+  else if (factors.some(function(f) { return f.level === 'medium'; })) level = 'medium';
+  else if (factors.length > 0 && factors.every(function(f) { return f.level === 'info'; })) level = 'info';
+
+  return { level: level, factors: factors, aiMaturity: profile.aiMaturity || null };
+}
+
+// Tool Portfolio Risk: derived from the declared tool inventory, built ON TOP
+// of classifyToolsInUse() (does not duplicate its bucketing logic), weighted
+// by the org's data sensitivity -- state.profile.regulated is the concrete
+// signal (SS1.4.5): a non-empty array means higher-sensitivity data is in
+// play. Escalation rule (decide-and-document, no formula specified in the
+// backlog): any high-risk tool always means 'high' exposure outright: a
+// caution-tier tool combined with sensitive data in play also escalates to
+// 'high' (the caution tool's risk is now touching regulated data, not just a
+// generic caution); a caution-tier tool with no declared sensitive data stays
+// 'medium'; unclassified (not in TOOL_MASTER_LIST) tools are treated as an
+// unknown risk, not a safe one, and register at least 'medium' rather than
+// being silently ignored.
+export function computeToolPortfolioRisk(selectedToolIds, otherTools, profile) {
+  var classified = classifyToolsInUse(selectedToolIds, otherTools);
+  var highRiskCount = classified.flagged['high-risk'].length;
+  var cautionCount = classified.flagged['caution'].length;
+  var lowerRiskCount = classified.flagged['lower-risk'].length;
+  var unclassifiedCount = classified.otherTools.length;
+  var dataSensitive = !!(profile && profile.regulated && profile.regulated.length > 0);
+
+  var level;
+  if (highRiskCount > 0) level = 'high';
+  else if (cautionCount > 0) level = dataSensitive ? 'high' : 'medium';
+  else if (unclassifiedCount > 0) level = 'medium';
+  else level = 'low';
+
+  return {
+    level: level,
+    highRiskCount: highRiskCount,
+    cautionCount: cautionCount,
+    lowerRiskCount: lowerRiskCount,
+    unclassifiedCount: unclassifiedCount,
+    dataSensitive: dataSensitive,
+    classified: classified
+  };
+}
+
+// Framework Coverage: percentage alignment against NIST AI RMF, reported
+// compliant/partial/missing PER NIST FUNCTION (govern/map/measure/manage).
+//
+// SCOPING CONSTRAINT, stated plainly rather than glossed over: R1's full
+// 72-subcategory NIST breakdown exists only in the research foundation
+// document -- it was never wired into this codebase as per-question metadata
+// (FRAMEWORK in data.js only has the 4 top-level functions, name+desc each).
+// Building true subcategory-level Framework Coverage would require adding
+// that 72-item map as real per-question metadata first -- substantial new
+// scope this item does not authorize. This function is honestly built at
+// FUNCTION-level granularity instead, using computeScores()'s existing
+// fnScores as its raw input. If closing this gap for real is worth its own
+// Build item, that is a scope-creation call for Kartik, not decided here --
+// flagged in the backlog, not built.
+//
+// Thresholds (70% compliant / 40% partial / below missing) intentionally
+// reuse computeTier()'s own 70/40 boundaries for the same semantic meaning
+// ("compliant" ~ what would be "Lower risk" territory, etc.) -- kept as
+// separate local literals here rather than importing/refactoring computeTier,
+// same reasoning as GOVERNANCE_GATING_THRESHOLD in B5: computeTier's own code
+// is untouched, per the ask-first boundary on that function.
+export function computeFrameworkCoverage(scores) {
+  var FRAMEWORK_COVERAGE_COMPLIANT_THRESHOLD = 70;
+  var FRAMEWORK_COVERAGE_PARTIAL_THRESHOLD = 40;
+  var coverage = {};
+  Object.keys(FRAMEWORK.functions).forEach(function(fn) {
+    var s = scores.fnScores[fn];
+    if (s.max === 0) {
+      coverage[fn] = { status: 'missing', pct: null };
+      return;
+    }
+    var pct = Math.round((s.sum / s.max) * 100);
+    var status = pct >= FRAMEWORK_COVERAGE_COMPLIANT_THRESHOLD ? 'compliant' :
+      (pct >= FRAMEWORK_COVERAGE_PARTIAL_THRESHOLD ? 'partial' : 'missing');
+    coverage[fn] = { status: status, pct: pct };
+  });
+  return coverage;
 }
 
 // Compares self-reported confidence (Likert 1-5, independent input) against the
@@ -388,4 +661,35 @@ export function getVisibilityTagsForDepartment(departmentId) {
   // .slice() so a caller mutating the returned array can't corrupt the
   // shared internal map for every future call.
   return (DEPARTMENT_VISIBILITY_MAP[departmentId] || ['operational']).slice();
+}
+
+// ============================================================================
+// B11: role -> visibility-tag resolution (backlog SS1.4.1/SS1.4.12). Given a
+// respondent's role (state.role shape from B3: {id, department}), returns
+// which VISIBILITY_TAGS apply to them -- the piece B8's future item-bank
+// filtering will need, built on top of B4's department -> tag inference
+// above. Does NOT filter getQuestionsForAssessment()'s output itself -- that
+// remains explicitly B8's job, gated on Kartik's review of R8's drafted
+// content, same as always. This only resolves the tag set a role+department
+// combination is entitled to.
+//
+// Design (decide-and-document -- SS1.4.12 states department determines WHICH
+// tags, role determines HOW MANY/how much of the pool, but not an exact
+// formula for combining them): leadership gets every VISIBILITY_TAGS value
+// unconditionally, regardless of department -- per SS1.4.1, leadership has
+// "org-wide visibility, strategic/accountability framing" by definition, so
+// artificially restricting a CEO's visibility to just their own department's
+// inferred tags would contradict that. dept-role and employee are treated
+// identically here -- both get exactly getVisibilityTagsForDepartment(role.
+// department) -- because the textual basis for narrowing visibility is
+// department, not the role/employee distinction itself; that distinction
+// matters for aggregation/comparison purposes (B20/B21's future job:
+// individual voice vs. collective departmental voice), not for which tags a
+// respondent can answer with real evidence. A missing/unset role falls back
+// to the same conservative default as a missing department (['operational']),
+// consistent with getVisibilityTagsForDepartment's own fallback above.
+export function getVisibilityTagsForRole(role) {
+  if (!role || !role.id) return getVisibilityTagsForDepartment(undefined);
+  if (role.id === 'leadership') return VISIBILITY_TAGS.slice();
+  return getVisibilityTagsForDepartment(role.department);
 }

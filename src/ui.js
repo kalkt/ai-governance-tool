@@ -44,7 +44,10 @@ import {
   applyScopeFraming,
   describeRole,
   roleVisibilityCaveat,
-  applyRoleFraming
+  applyRoleFraming,
+  computeRegulatoryExposure,
+  computeToolPortfolioRisk,
+  computeFrameworkCoverage
 } from './logic.js';
 
 // ============================================================================
@@ -771,6 +774,18 @@ export function renderReport() {
   var modules = getApplicableModules(state.profile);
   var confidenceGap = computeConfidenceGap(scores, state.confidenceAnswers);
 
+  // B10: three dimensions reported separately, never averaged into scores.overall
+  // above. No dedicated report section exists yet (B14 rebuilds the report
+  // properly) -- this is a deliberately lightweight surfacing so the new
+  // functions are exercised and visible today, reusing existing CSS
+  // (tool-badge high/caution/low for the two level-based dimensions,
+  // tier-pill tier-low/tier-med/tier-high for the compliant/partial/missing
+  // per-function pills) rather than adding new styling for a section B14 will
+  // likely redesign anyway.
+  var regulatoryExposure = computeRegulatoryExposure(state.profile);
+  var toolPortfolioRisk = computeToolPortfolioRisk(state.toolsSelected, state.otherTools, state.profile);
+  var frameworkCoverage = computeFrameworkCoverage(scores);
+
   var highCount = gaps.filter(function(g) { return g.priority === 'high'; }).length;
   var medCount = gaps.filter(function(g) { return g.priority === 'medium'; }).length;
 
@@ -845,6 +860,45 @@ export function renderReport() {
         '<div class="fn-compare-row"><span class="fn-compare-label">Confidence</span><div class="bar confidence"><span style="width:' + (g.confidencePct || 0) + '%"></span></div><span>' + (g.confidencePct !== null ? g.confidencePct + '%' : '—') + '</span></div>' +
         '</div>';
     }).join('') + '</div></div>';
+
+  // B10: Regulatory Exposure, Tool Portfolio Risk, Framework Coverage --
+  // reported separately, never folded into the readiness score above. A
+  // lightweight preview ahead of B14's proper report rebuild (see the
+  // comment where these are computed, above).
+  var levelBadgeCls = function(level) { return level === 'high' ? 'high' : (level === 'medium' ? 'caution' : (level === 'low' ? 'low' : '')); };
+  var levelBadgeLabel = function(level) { return level === 'high' ? 'High' : (level === 'medium' ? 'Medium' : (level === 'low' ? 'Low' : 'Info')); };
+  var coverageTierCls = function(status) { return status === 'compliant' ? 'tier-low' : (status === 'partial' ? 'tier-med' : 'tier-high'); };
+  var coverageLabel = function(status) { return status === 'compliant' ? 'Compliant' : (status === 'partial' ? 'Partial' : 'Missing'); };
+
+  html += '<div class="section"><h2>Regulatory &amp; portfolio context</h2>' +
+    '<p class="qmeta" style="margin-bottom:12px;">Reported separately from the readiness score above -- these describe exposure and coverage, not governance maturity, and are never averaged into it.</p>' +
+
+    '<p class="b10-label" style="margin-bottom:6px;">Regulatory exposure ' +
+      (regulatoryExposure.level !== 'info' ? '<span class="tool-badge ' + levelBadgeCls(regulatoryExposure.level) + '">' + levelBadgeLabel(regulatoryExposure.level) + '</span>' : '') +
+    '</p>' +
+    (regulatoryExposure.factors.length === 0 ? '<p class="qmeta">No jurisdiction, industry, or data-type factors currently on file.</p>' :
+      '<ul class="phase ul" style="margin:0 0 12px; padding-left:18px; font-size:13px; color:var(--text-secondary);">' +
+        // Show label + detail together -- label alone is often too generic
+        // ("Industry-specific regulation") to carry the actual citation, and
+        // detail alone drops the short heading. Skip the redundant repeat
+        // when they're identical (the simpler regulated-data-type factors).
+        regulatoryExposure.factors.map(function(f) {
+          return '<li>' + (f.label === f.detail ? f.detail : '<strong>' + f.label + ':</strong> ' + f.detail) + '</li>';
+        }).join('') +
+      '</ul>') +
+
+    '<p class="b10-label" style="margin-bottom:6px;">Tool portfolio risk <span class="tool-badge ' + levelBadgeCls(toolPortfolioRisk.level) + '">' + levelBadgeLabel(toolPortfolioRisk.level) + '</span></p>' +
+    '<p class="qmeta" style="margin-bottom:12px;">' + toolPortfolioRisk.highRiskCount + ' high-risk, ' + toolPortfolioRisk.cautionCount + ' caution, ' + toolPortfolioRisk.lowerRiskCount + ' lower-risk, ' + toolPortfolioRisk.unclassifiedCount + ' unclassified.' + (toolPortfolioRisk.dataSensitive ? ' Weighted up for declared sensitive data types.' : '') + '</p>' +
+
+    '<p class="b10-label" style="margin-bottom:6px;">Framework coverage (by NIST function)</p>' +
+    '<div class="fn-grid">' +
+    Object.keys(FRAMEWORK.functions).map(function(k) {
+      var c = frameworkCoverage[k];
+      return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
+        '<span class="tier-pill ' + coverageTierCls(c.status) + '">' + coverageLabel(c.status) + '</span></div>' +
+        '<p class="fn-desc">' + (c.pct !== null ? c.pct + '%' : 'No data') + '</p></div>';
+    }).join('') + '</div>' +
+  '</div>';
 
   // Recommendations
   html += '<div class="section"><h2>Prioritized recommendations</h2>' +

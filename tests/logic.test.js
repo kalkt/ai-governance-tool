@@ -19,9 +19,15 @@ import {
   roleVisibilityCaveat,
   applyRoleFraming,
   getVisibilityTagsForDepartment,
-  GOVERNANCE_GATING_THRESHOLD
+  GOVERNANCE_GATING_THRESHOLD,
+  classifyUseCaseRisk,
+  getOversightExpectation,
+  computeRegulatoryExposure,
+  computeToolPortfolioRisk,
+  computeFrameworkCoverage,
+  getVisibilityTagsForRole
 } from '../src/logic.js';
-import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS } from '../src/data.js';
+import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST } from '../src/data.js';
 
 describe('computeTier', () => {
   it('classifies a score of exactly 70 as low risk (lower boundary of the low tier)', () => {
@@ -46,6 +52,144 @@ describe('computeTier', () => {
 
   it('classifies a score of 100 as low risk (maximum extreme)', () => {
     expect(computeTier(100).key).toBe('low');
+  });
+});
+
+describe('classifyUseCaseRisk (B6)', () => {
+  function useCase(overrides) {
+    var base = { annexIiiDomainIds: [] };
+    RISK_CRITERIA.forEach(function(c) { base[c] = 0; });
+    return Object.assign(base, overrides || {});
+  }
+
+  it('classifies a non-Annex-III use case with low criteria scores as Tier 4 (Low)', () => {
+    const result = classifyUseCaseRisk(useCase(), '11-50');
+    expect(result.tier.key).toBe('tier4');
+  });
+
+  it('classifies a non-Annex-III use case with high criteria scores as Tier 3 (Medium), not higher', () => {
+    // Annex III membership is the trigger for Tier 1/2 -- severity alone,
+    // without touching a high-risk domain, caps out at Tier 3.
+    const criteria = {};
+    RISK_CRITERIA.forEach(function(c) { criteria[c] = 3; });
+    const result = classifyUseCaseRisk(useCase(criteria), '11-50');
+    expect(result.tier.key).toBe('tier3');
+    expect(result.compositeScore).toBe(3);
+  });
+
+  it('classifies an Annex-III-domain use case with high criteria scores as Tier 1 (Critical)', () => {
+    const criteria = { annexIiiDomainIds: ['employment-worker-management'] };
+    RISK_CRITERIA.forEach(function(c) { criteria[c] = 3; });
+    const result = classifyUseCaseRisk(useCase(criteria), '1000+');
+    expect(result.tier.key).toBe('tier1');
+  });
+
+  it('classifies an Annex-III-domain use case with low criteria scores as Tier 2 (High), not Tier 1', () => {
+    const result = classifyUseCaseRisk(useCase({ annexIiiDomainIds: ['biometrics'] }), '1000+');
+    expect(result.tier.key).toBe('tier2');
+  });
+
+  it('splits exactly at the composite midpoint (1.5): below is the less severe tier of the pair', () => {
+    // useCase() answers all 7 criteria (defaulting to 0); overriding 2 of
+    // them to 1 gives composite = 2/7 = 0.2857..., rounded to 0.29, well
+    // under 1.5.
+    const result = classifyUseCaseRisk(useCase({ materiality: 1, autonomy: 1 }), '11-50');
+    expect(result.compositeScore).toBe(0.29);
+    expect(result.tier.key).toBe('tier4');
+  });
+
+  it('splits exactly at the composite midpoint (1.5): at or above is the more severe tier of the pair', () => {
+    // 4 of 7 criteria at max (3), rest at 0 -> composite = 12/7 = 1.714, >= 1.5.
+    const criteria = {};
+    RISK_CRITERIA.forEach(function(c, i) { criteria[c] = i < 4 ? 3 : 0; });
+    const result = classifyUseCaseRisk(useCase(criteria), '11-50');
+    expect(result.compositeScore).toBeGreaterThanOrEqual(1.5);
+    expect(result.tier.key).toBe('tier3');
+  });
+
+  it('defaults the composite to 0 (least severe) when no criteria are answered at all', () => {
+    const result = classifyUseCaseRisk({ annexIiiDomainIds: [] }, '11-50');
+    expect(result.compositeScore).toBe(0);
+    expect(result.tier.key).toBe('tier4');
+  });
+
+  it('ignores non-numeric criteria values rather than crashing', () => {
+    const result = classifyUseCaseRisk({ annexIiiDomainIds: [], materiality: undefined, autonomy: null }, '11-50');
+    expect(result.compositeScore).toBe(0);
+  });
+
+  it('records which Annex III domain ids triggered the gate', () => {
+    const result = classifyUseCaseRisk(useCase({ annexIiiDomainIds: ['law-enforcement', 'biometrics'] }), '11-50');
+    expect(result.annexIiiDomainIds).toEqual(['law-enforcement', 'biometrics']);
+  });
+
+  it('attaches an oversight expectation from getOversightExpectation for the resolved tier and given size', () => {
+    const result = classifyUseCaseRisk(useCase({ annexIiiDomainIds: ['biometrics'] }), '1000+');
+    expect(result.oversight).toEqual(getOversightExpectation('tier2', '1000+'));
+  });
+});
+
+describe('getOversightExpectation (B6)', () => {
+  it('merges Tier 2 and Tier 3 oversight language for every "under ~200 employees" size band', () => {
+    SMALL_ORG_SIZE_BANDS.forEach(function(band) {
+      const tier2 = getOversightExpectation('tier2', band);
+      const tier3 = getOversightExpectation('tier3', band);
+      expect(tier2).toEqual(OVERSIGHT_EXPECTATIONS['tier2-3-small']);
+      expect(tier2).toEqual(tier3);
+    });
+  });
+
+  it('does not merge Tier 2 and Tier 3 for size bands of 201+ employees', () => {
+    ['201-1000', '1000+'].forEach(function(band) {
+      const tier2 = getOversightExpectation('tier2', band);
+      const tier3 = getOversightExpectation('tier3', band);
+      expect(tier2).not.toEqual(tier3);
+    });
+  });
+
+  it('gives Tier 1 its own distinct oversight expectation at every size band, never merged', () => {
+    COMPANY_SIZE_BANDS.forEach(function(band) {
+      const tier1 = getOversightExpectation('tier1', band);
+      expect(tier1.signoffRequired).toBe(true);
+      expect(tier1).not.toEqual(OVERSIGHT_EXPECTATIONS['tier2-3-small']);
+    });
+  });
+
+  it('requires no signoff at Tier 4 for any size band', () => {
+    COMPANY_SIZE_BANDS.forEach(function(band) {
+      expect(getOversightExpectation('tier4', band).signoffRequired).toBe(false);
+    });
+  });
+
+  it('returns null for an unrecognized tier or size band rather than guessing', () => {
+    expect(getOversightExpectation('not-a-tier', '11-50')).toBeNull();
+    expect(getOversightExpectation('tier1', 'not-a-band')).toBeNull();
+  });
+});
+
+describe('B6 data integrity: ANNEX_III_DOMAINS / RISK_TIERS / RISK_CRITERIA', () => {
+  it('has 8 Annex III domains, matching backlog SS1.4.6 exactly, with no duplicate ids', () => {
+    expect(ANNEX_III_DOMAINS).toHaveLength(8);
+    const ids = ANNEX_III_DOMAINS.map(function(d) { return d.id; });
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('has exactly 4 risk tiers in Tier 1 -> Tier 4 order', () => {
+    expect(RISK_TIERS.map(function(t) { return t.key; })).toEqual(['tier1', 'tier2', 'tier3', 'tier4']);
+  });
+
+  it('has exactly 7 risk criteria, matching backlog SS1.4.6', () => {
+    expect(RISK_CRITERIA).toHaveLength(7);
+  });
+
+  it('does not let a risk-tier key collide with a GOVERNANCE_DIMENSIONS, SCOPE_OPTIONS, ROLE_OPTIONS, VISIBILITY_TAGS, or DEPARTMENTS id', () => {
+    const reservedIds = ['org', 'department', 'initiative', 'leadership', 'dept-role', 'employee']
+      .concat(VISIBILITY_TAGS)
+      .concat(DEPARTMENTS.map(function(d) { return d.id; }))
+      .concat(GOVERNANCE_DIMENSIONS.map(function(d) { return d.id; }));
+    RISK_TIERS.forEach(function(t) {
+      expect(reservedIds).not.toContain(t.key);
+    });
   });
 });
 
@@ -703,6 +847,207 @@ describe('classifyToolsInUse', () => {
   });
 });
 
+describe('computeToolPortfolioRisk (B10)', () => {
+  const noRegulated = { regulated: [] };
+  const withRegulated = { regulated: ['pii'] };
+
+  it('returns "low" when nothing is selected', () => {
+    const result = computeToolPortfolioRisk([], [], noRegulated);
+    expect(result.level).toBe('low');
+    expect(result.dataSensitive).toBe(false);
+  });
+
+  it('returns "high" whenever any high-risk tool is selected, regardless of data sensitivity', () => {
+    const result = computeToolPortfolioRisk(['t-grok'], [], noRegulated);
+    expect(result.level).toBe('high');
+    expect(result.highRiskCount).toBe(1);
+  });
+
+  it('returns "medium" for a caution-tier tool with no declared sensitive data', () => {
+    const result = computeToolPortfolioRisk(['t-chatgpt'], [], noRegulated);
+    expect(result.level).toBe('medium');
+    expect(result.cautionCount).toBe(1);
+    expect(result.dataSensitive).toBe(false);
+  });
+
+  it('escalates a caution-tier tool to "high" when sensitive data is declared in profile.regulated', () => {
+    const result = computeToolPortfolioRisk(['t-chatgpt'], [], withRegulated);
+    expect(result.level).toBe('high');
+    expect(result.dataSensitive).toBe(true);
+  });
+
+  it('returns "low" for only lower-risk tools with no sensitive data', () => {
+    const result = computeToolPortfolioRisk(['t-canva'], [], noRegulated);
+    expect(result.level).toBe('low');
+    expect(result.lowerRiskCount).toBe(1);
+  });
+
+  it('treats an unclassified (not in TOOL_MASTER_LIST) tool as at least "medium", not silently safe', () => {
+    const result = computeToolPortfolioRisk([], ['Some Unlisted Tool'], noRegulated);
+    expect(result.level).toBe('medium');
+    expect(result.unclassifiedCount).toBe(1);
+  });
+
+  it('builds on classifyToolsInUse rather than re-deriving its own bucketing (same classified shape)', () => {
+    const result = computeToolPortfolioRisk(['t-grok', 't-chatgpt'], [], noRegulated);
+    expect(result.classified).toEqual(classifyToolsInUse(['t-grok', 't-chatgpt'], []));
+  });
+
+  it('treats a missing/undefined profile as not data-sensitive rather than throwing', () => {
+    expect(() => computeToolPortfolioRisk([], [], undefined)).not.toThrow();
+    expect(computeToolPortfolioRisk([], [], undefined).dataSensitive).toBe(false);
+  });
+});
+
+describe('computeFrameworkCoverage (B10)', () => {
+  function fnScoresWith(overrides) {
+    const base = {
+      govern: { sum: 0, max: 0 }, map: { sum: 0, max: 0 },
+      measure: { sum: 0, max: 0 }, manage: { sum: 0, max: 0 }
+    };
+    return Object.assign(base, overrides);
+  }
+
+  it('marks a function "missing" with a null pct when it has no answered questions at all', () => {
+    const result = computeFrameworkCoverage({ fnScores: fnScoresWith({}) });
+    expect(result.govern).toEqual({ status: 'missing', pct: null });
+  });
+
+  it('marks a function "compliant" at exactly the 70% boundary', () => {
+    const result = computeFrameworkCoverage({ fnScores: fnScoresWith({ govern: { sum: 21, max: 30 } }) }); // 70%
+    expect(result.govern).toEqual({ status: 'compliant', pct: 70 });
+  });
+
+  it('marks a function "partial" just under the 70% boundary', () => {
+    const result = computeFrameworkCoverage({ fnScores: fnScoresWith({ govern: { sum: 20, max: 30 } }) }); // 66.67% -> 67
+    expect(result.govern.status).toBe('partial');
+  });
+
+  it('marks a function "partial" at exactly the 40% boundary', () => {
+    const result = computeFrameworkCoverage({ fnScores: fnScoresWith({ govern: { sum: 4, max: 10 } }) }); // 40%
+    expect(result.govern).toEqual({ status: 'partial', pct: 40 });
+  });
+
+  it('marks a function "missing" (with a real, non-null pct) just under the 40% boundary', () => {
+    const result = computeFrameworkCoverage({ fnScores: fnScoresWith({ govern: { sum: 3, max: 10 } }) }); // 30%
+    expect(result.govern).toEqual({ status: 'missing', pct: 30 });
+  });
+
+  it('reports all four NIST functions independently', () => {
+    const result = computeFrameworkCoverage({
+      fnScores: fnScoresWith({
+        govern: { sum: 30, max: 30 },
+        map: { sum: 0, max: 0 },
+        measure: { sum: 5, max: 10 },
+        manage: { sum: 1, max: 10 }
+      })
+    });
+    expect(result.govern.status).toBe('compliant');
+    expect(result.map.status).toBe('missing');
+    expect(result.map.pct).toBeNull();
+    expect(result.measure.status).toBe('partial');
+    expect(result.manage.status).toBe('missing');
+    expect(result.manage.pct).toBe(10);
+  });
+
+  it('agrees with computeTier\'s own boundaries semantically (uses computeScores\' real fnScores output)', () => {
+    const questions = [{ id: 'g1', fn: 'govern', dimension: 'controls-evidence' }];
+    const scores = computeScores(questions, { g1: 3 }); // 100%
+    const coverage = computeFrameworkCoverage(scores);
+    expect(coverage.govern.status).toBe('compliant');
+    expect(computeTier(100).key).toBe('low'); // same 70%+ territory, same meaning
+  });
+});
+
+describe('computeRegulatoryExposure (B10)', () => {
+  const baseProfile = { region: null, industry: null, regulated: [], customerType: null, aiMaturity: null };
+
+  it('returns "low" with no factors for a profile with nothing regulatory-relevant set', () => {
+    const result = computeRegulatoryExposure(baseProfile);
+    expect(result.level).toBe('low');
+    expect(result.factors).toEqual([]);
+  });
+
+  it('flags EU region as "high" exposure, citing R4', () => {
+    const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { region: 'eu' }));
+    expect(result.level).toBe('high');
+    const factor = result.factors.find(f => f.id === 'eu-ai-act');
+    expect(factor.source).toBe('R4, backlog SS1.5.4');
+  });
+
+  it('flags US region as "medium" with an explicit Colorado caveat, not a definitive determination', () => {
+    const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { region: 'us' }));
+    const factor = result.factors.find(f => f.id === 'us-state-patchwork');
+    expect(factor.level).toBe('medium');
+    expect(factor.detail).toContain('does not currently capture which US state');
+    expect(factor.source).toBe('R5, backlog SS1.5.4');
+  });
+
+  it('flags Canada region as "medium", citing R6, and correctly states AIDA never became law', () => {
+    const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { region: 'ca' }));
+    const factor = result.factors.find(f => f.id === 'canada-patchwork');
+    expect(factor.level).toBe('medium');
+    expect(factor.detail).toContain('AIDA never became law');
+    expect(factor.source).toBe('R6, backlog SS1.5.4');
+  });
+
+  it('flags UK and "other" regions as an honest research gap, not a fabricated finding', () => {
+    ['uk', 'other'].forEach(function(region) {
+      const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { region: region }));
+      const factor = result.factors.find(f => f.id === 'no-dedicated-research');
+      expect(factor).toBeDefined();
+      expect(factor.level).toBe('info');
+      expect(factor.source).toBeNull();
+    });
+  });
+
+  it('reports the overall level as "info" (not "low") when the only factor present is an unresearched-region gap', () => {
+    // Distinct from the true "low" case (no factors at all) -- an unresearched
+    // region should never be silently reported as "checked, and it's fine."
+    const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { region: 'uk' }));
+    expect(result.level).toBe('info');
+  });
+
+  it('adds an industry-specific factor for the four industries with an established regulatory note', () => {
+    Object.keys(REGULATORY_INDUSTRY_NOTES).forEach(function(industry) {
+      const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { industry: industry }));
+      const factor = result.factors.find(f => f.id === 'industry-' + industry);
+      expect(factor.detail).toBe(REGULATORY_INDUSTRY_NOTES[industry]);
+    });
+  });
+
+  it('does not add an industry factor for an industry with no established regulatory note', () => {
+    const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { industry: 'retail' }));
+    expect(result.factors.find(f => f.id && f.id.indexOf('industry-') === 0)).toBeUndefined();
+  });
+
+  it('adds a factor per selected regulated data type, each at its own level', () => {
+    const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { regulated: ['pii', 'phi', 'eu-customers'] }));
+    expect(result.factors.find(f => f.id === 'data-pii').level).toBe('medium');
+    expect(result.factors.find(f => f.id === 'data-phi').level).toBe('high');
+    expect(result.factors.find(f => f.id === 'data-eu-customers').level).toBe('high');
+    expect(result.level).toBe('high');
+  });
+
+  it('adds a government-customer factor when customerType is "gov"', () => {
+    const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { customerType: 'gov' }));
+    expect(result.factors.find(f => f.id === 'gov-customers')).toBeDefined();
+  });
+
+  it('carries aiMaturity through as context without treating it as its own scored factor', () => {
+    const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { aiMaturity: 'scaled' }));
+    expect(result.aiMaturity).toBe('scaled');
+    expect(result.factors.find(f => f.id === 'scaled')).toBeUndefined();
+  });
+
+  it('the overall level is "high" if any single factor is "high", even when others are lower', () => {
+    const result = computeRegulatoryExposure(Object.assign({}, baseProfile, { region: 'ca', regulated: ['phi'] }));
+    expect(result.factors.some(f => f.level === 'medium')).toBe(true);
+    expect(result.factors.some(f => f.level === 'high')).toBe(true);
+    expect(result.level).toBe('high');
+  });
+});
+
 describe('filterToolsForProfile', () => {
   it("includes tools tagged 'all' regardless of the profile's industry", () => {
     const result = filterToolsForProfile({ industry: 'healthcare' });
@@ -1111,6 +1456,57 @@ describe('DEPARTMENTS and VISIBILITY_TAGS data integrity (B4)', () => {
     const reservedIds = ['org', 'department', 'initiative', 'leadership', 'dept-role', 'employee'];
     VISIBILITY_TAGS.forEach(function(tag) {
       expect(reservedIds).not.toContain(tag);
+    });
+  });
+});
+
+describe('getVisibilityTagsForRole (B11)', () => {
+  it('grants leadership every VISIBILITY_TAGS value, regardless of department', () => {
+    expect(getVisibilityTagsForRole({ id: 'leadership', department: 'it-engineering' }).sort())
+      .toEqual(VISIBILITY_TAGS.slice().sort());
+    expect(getVisibilityTagsForRole({ id: 'leadership', department: '' }).sort())
+      .toEqual(VISIBILITY_TAGS.slice().sort());
+  });
+
+  it("resolves dept-role's tags via getVisibilityTagsForDepartment, matching its department exactly", () => {
+    const result = getVisibilityTagsForRole({ id: 'dept-role', department: 'it-engineering' });
+    expect(result).toEqual(getVisibilityTagsForDepartment('it-engineering'));
+    expect(result).toContain('technical-build');
+  });
+
+  it("resolves employee's tags identically to dept-role for the same department (role/employee distinction is not a visibility restriction)", () => {
+    const dept = getVisibilityTagsForRole({ id: 'dept-role', department: 'legal' });
+    const employee = getVisibilityTagsForRole({ id: 'employee', department: 'legal' });
+    expect(employee).toEqual(dept);
+  });
+
+  it('falls back to the same conservative default as a missing department when role is missing entirely', () => {
+    expect(getVisibilityTagsForRole(null)).toEqual(getVisibilityTagsForDepartment(undefined));
+    expect(getVisibilityTagsForRole({})).toEqual(getVisibilityTagsForDepartment(undefined));
+    expect(getVisibilityTagsForRole({ id: null })).toEqual(['operational']);
+  });
+
+  it('falls back to the department-inference default when a non-leadership role has no department set', () => {
+    expect(getVisibilityTagsForRole({ id: 'employee', department: '' })).toEqual(['operational']);
+    expect(getVisibilityTagsForRole({ id: 'dept-role' })).toEqual(['operational']);
+  });
+
+  it('returns a fresh array each call, not a shared reference a caller could corrupt', () => {
+    const first = getVisibilityTagsForRole({ id: 'leadership' });
+    first.push('mutated');
+    const second = getVisibilityTagsForRole({ id: 'leadership' });
+    expect(second).toEqual(VISIBILITY_TAGS);
+    expect(second).not.toContain('mutated');
+  });
+
+  it('every tag returned for every real ROLE_OPTIONS x DEPARTMENTS combination is a valid VISIBILITY_TAGS value', () => {
+    var roleIds = ['leadership', 'dept-role', 'employee'];
+    roleIds.forEach(function(roleId) {
+      DEPARTMENTS.forEach(function(d) {
+        getVisibilityTagsForRole({ id: roleId, department: d.id }).forEach(function(tag) {
+          expect(VISIBILITY_TAGS).toContain(tag);
+        });
+      });
     });
   });
 });

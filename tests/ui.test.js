@@ -726,6 +726,44 @@ describe('renderReport: remaining branches', () => {
     expect(document.getElementById('stage-report').innerHTML).toContain('Industry-specific overlays for Healthcare');
   });
 
+  it('renders the regulatory & portfolio context section end-to-end (B10)', () => {
+    primeReportState();
+    state.profile.region = 'eu';
+    state.profile.industry = 'healthcare';
+    state.profile.regulated = ['eu-customers'];
+    state.toolsSelected = ['t-chatgpt']; // caution-tier + sensitive data -> escalates to high
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('Regulatory &amp; portfolio context');
+    expect(html).toContain('EU AI Act (via the Digital Omnibus amendment)');
+    expect(html).toContain('HIPAA governs protected health information');
+    expect(html).toContain('Weighted up for declared sensitive data types');
+    // Both level-based badges should read "High" given the fixture above.
+    const labels = Array.from(document.querySelectorAll('.b10-label')).map(function(el) { return el.textContent.trim(); });
+    expect(labels[0]).toContain('High');
+    expect(labels[1]).toContain('High');
+  });
+
+  it('shows an "Info" gap badge, not a High/Medium/Low one, for a region with no dedicated research', () => {
+    primeReportState();
+    state.profile.region = 'uk';
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('No dedicated regulatory research completed for this region yet');
+    const firstLabel = document.querySelectorAll('.b10-label')[0];
+    expect(firstLabel.querySelector('.tool-badge')).toBeNull(); // 'info' level renders no badge
+  });
+
+  it('shows "No jurisdiction..." placeholder text and a "Partial" framework-coverage pill when applicable', () => {
+    primeReportState();
+    // Mixed answers so at least one NIST function lands in the 40-69% "partial" band.
+    state.questions.forEach(function(q, i) { state.answers[q.id] = i % 2 === 0 ? 1 : 3; });
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('No jurisdiction, industry, or data-type factors currently on file');
+    expect(html).toContain('Framework coverage (by NIST function)');
+  });
+
   it('flags an overconfident function when self-reported confidence outpaces evidence', () => {
     primeReportState(); // all answers are 0 -> 0% evidence everywhere
     ['govern', 'map', 'measure', 'manage'].forEach(function(fn) { state.confidenceAnswers[fn] = 5; }); // max confidence

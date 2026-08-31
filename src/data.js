@@ -178,6 +178,120 @@ export const GOVERNANCE_DIMENSIONS = [
   { id: 'monitoring-response', label: 'Monitoring & Response', weight: 15 }
 ];
 
+// ============================================================================
+// B6: per-USE-CASE risk tiering (backlog SS1.4.6). Distinct from computeTier()
+// above, which buckets the ORGANIZATION's overall readiness score -- this
+// classifies one specific AI use case/tool. See classifyUseCaseRisk() in
+// logic.js for the actual tiering calculation; this file only holds its data.
+// ============================================================================
+
+// EU AI Act Annex III high-risk domains -- the Tier 1/2 trigger set per
+// SS1.4.6, replacing the original "regulatory capital" (banking-only) trigger.
+// Transcribed directly from the backlog's own already-established list, not a
+// new regulatory claim being made here.
+export const ANNEX_III_DOMAINS = [
+  { id: 'biometrics', label: 'Biometrics' },
+  { id: 'critical-infrastructure', label: 'Critical infrastructure' },
+  { id: 'education-vocational', label: 'Education / vocational training' },
+  { id: 'employment-worker-management', label: 'Employment / worker management' },
+  { id: 'essential-services-benefits', label: 'Essential services & benefits', hint: 'Public assistance, healthcare, creditworthiness, insurance, emergency dispatch' },
+  { id: 'law-enforcement', label: 'Law enforcement' },
+  { id: 'migration-asylum-border', label: 'Migration / asylum / border control' },
+  { id: 'justice-democratic-processes', label: 'Justice / democratic processes' }
+];
+
+// The seven use-case classification criteria (SS1.4.6), unchanged from the
+// original research foundation per the backlog's own note that these "were
+// already sector-agnostic and didn't need fixing." Each is scored 0-3 in
+// classifyUseCaseRisk() -- NOTE THE POLARITY DIFFERENCE from BASE_QUESTIONS
+// etc.: here 0 = lowest risk contribution, 3 = highest (risk-forward), the
+// opposite of the governance-maturity questions' 0=worst/3=best scale. A
+// deliberate, documented choice (decide-and-document) since a risk-severity
+// scale reading "higher number = more risk" is the more intuitive polarity
+// for this specific function, even though it differs from the rest of the
+// codebase's convention.
+export const RISK_CRITERIA = [
+  'materiality',
+  'autonomy',
+  'dataSensitivity',
+  'consequentialDecisions',
+  'populationAffected',
+  'reversibility',
+  'thirdPartyDependency'
+];
+
+export const RISK_TIERS = [
+  { key: 'tier1', label: 'Tier 1 — Critical' },
+  { key: 'tier2', label: 'Tier 2 — High' },
+  { key: 'tier3', label: 'Tier 3 — Medium' },
+  { key: 'tier4', label: 'Tier 4 — Low' }
+];
+
+// Company size bands -- deliberately the exact same five strings
+// state.profile.size already uses in src/ui.js's renderProfile(), not a new
+// list. Centralized here as data so classifyUseCaseRisk()'s (tier x size)
+// oversight lookup below has something to key off of.
+export const COMPANY_SIZE_BANDS = ['1-10', '11-50', '51-200', '201-1000', '1000+'];
+
+// Bands SS1.4.6 calls "under ~200 employees" -- where Tier 2 and Tier 3
+// oversight language is merged, since RaftLabs' independent SMB framework
+// (R3) found governance gets distributed across existing leadership roles at
+// this scale rather than routed through new dedicated committees.
+export const SMALL_ORG_SIZE_BANDS = ['1-10', '11-50', '51-200'];
+
+// Oversight/validation expectation per (risk tier x company size band),
+// SS1.4.6's own instruction ("a lookup... not a single universal column").
+// Newly authored operational-guidance copy for this item (decide-and-document,
+// same discipline as B4's DEPARTMENTS list) -- grounded in SS1.4.6's own
+// size-band baseline (1-10 owner-led informal / 11-50 exec review / 51-200
+// formal board + part-time compliance / 201-1000 dedicated governance role +
+// board committee / 1000+ full governance function) and the Tier2/Tier3 merge
+// instruction, but the exact reviewer/cadence/signoff phrasing per cell is
+// this item's own construction, not quoted from any source. Structured
+// (reviewer/cadence/signoffRequired) rather than freeform sentences so a
+// future report can render it consistently.
+export const OVERSIGHT_EXPECTATIONS = {
+  tier1: {
+    '1-10': { reviewer: 'Owner/executive', cadence: 'Before deployment, then quarterly', signoffRequired: true },
+    '11-50': { reviewer: 'Executive leadership', cadence: 'Before deployment, then quarterly', signoffRequired: true },
+    '51-200': { reviewer: 'Board or a designated committee', cadence: 'Before deployment, then quarterly', signoffRequired: true },
+    '201-1000': { reviewer: 'Dedicated governance role plus board committee', cadence: 'Before deployment, then quarterly', signoffRequired: true },
+    '1000+': { reviewer: 'Full governance function plus board', cadence: 'Before deployment, then quarterly and after any material change', signoffRequired: true }
+  },
+  // Merged Tier 2/Tier 3 language for orgs under ~200 employees, per SS1.4.6.
+  'tier2-3-small': { reviewer: 'Owner or leadership', cadence: 'Before deployment, then annually', signoffRequired: true },
+  tier2: {
+    '201-1000': { reviewer: 'Dedicated governance role', cadence: 'Before deployment, then semi-annually', signoffRequired: true },
+    '1000+': { reviewer: 'Governance function', cadence: 'Before deployment, then semi-annually', signoffRequired: true }
+  },
+  tier3: {
+    '201-1000': { reviewer: 'Dedicated governance role', cadence: 'Before deployment, then annually', signoffRequired: false },
+    '1000+': { reviewer: 'Governance function', cadence: 'Before deployment, then annually', signoffRequired: false }
+  },
+  tier4: {
+    '1-10': { reviewer: 'None required', cadence: 'Log in inventory only', signoffRequired: false },
+    '11-50': { reviewer: 'None required', cadence: 'Log in inventory only', signoffRequired: false },
+    '51-200': { reviewer: 'None required', cadence: 'Log in inventory, spot-check periodically', signoffRequired: false },
+    '201-1000': { reviewer: 'Standard intake process', cadence: 'Log in inventory only', signoffRequired: false },
+    '1000+': { reviewer: 'Standard intake process', cadence: 'Log in inventory only', signoffRequired: false }
+  }
+};
+
+// ============================================================================
+// B10: Regulatory Exposure's industry leg (Framework Coverage and Tool
+// Portfolio Risk need no dedicated data here -- see logic.js). Reuses the
+// exact same regulation names src/ui.js's buildScopeText() already shows for
+// these four industries (HIPAA/SR 11-7/FERPA/FedRAMP) -- not a new claim,
+// the same already-reviewed framing centralized so computeRegulatoryExposure()
+// in logic.js can cite it without importing from the UI layer.
+// ============================================================================
+export const REGULATORY_INDUSTRY_NOTES = {
+  healthcare: 'HIPAA governs protected health information in the US.',
+  financial: 'SR 11-7 (model risk management) applies to financial institutions\' use of models, including AI.',
+  education: 'FERPA governs student education records.',
+  government: 'FedRAMP authorization is typically required for AI tools used by US government agencies.'
+};
+
 // Base NIST questions (from v1, unchanged)
 export const BASE_QUESTIONS = [
   { id: 'g1', fn: 'govern', module: 'base', dimension: 'controls-evidence', depths: ['quick','standard','comprehensive'],
