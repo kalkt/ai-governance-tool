@@ -731,3 +731,84 @@ export function meetsAggregationThreshold(count) {
   return typeof count === 'number' && count >= AGGREGATION_MIN_GROUP_SIZE;
 }
 
+// ============================================================================
+// B13: New AI Tool Adoption assessment (backlog SS1.4.7) -- assembles this
+// assessment's own answers (TOOL_ADOPTION_QUESTIONS, data.js) into
+// classifyUseCaseRisk()'s (B6) input shape and layers the two NIST MANAGE
+// decision-point questions into a go/no-go readiness signal alongside the
+// resulting tier. This is a genuinely separate assessment pipeline from
+// Governance Readiness (computeScores/getQuestionsForAssessment) -- it is
+// never wired through those functions, per SS1.4.7's "two distinct
+// assessment types" framing.
+// ============================================================================
+
+// toolAdoptionAnswers is keyed by TOOL_ADOPTION_QUESTIONS ids -- the seven
+// risk-criteria ids match RISK_CRITERIA exactly (data.js), so no mapping step
+// is needed before handing it to classifyUseCaseRisk; the two ma-adopt-*
+// answers are simply additional keys classifyUseCaseRisk ignores (it only
+// reads RISK_CRITERIA's own keys plus annexIiiDomainIds).
+export function evaluateToolAdoption(toolAdoptionAnswers, annexIiiDomainIds, companySize) {
+  var useCaseAnswers = Object.assign({}, toolAdoptionAnswers, { annexIiiDomainIds: annexIiiDomainIds || [] });
+  var classification = classifyUseCaseRisk(useCaseAnswers, companySize);
+
+  var decisionMade = typeof toolAdoptionAnswers['ma-adopt-1'] === 'number' ? toolAdoptionAnswers['ma-adopt-1'] : null;
+  var alternativesConsidered = typeof toolAdoptionAnswers['ma-adopt-2'] === 'number' ? toolAdoptionAnswers['ma-adopt-2'] : null;
+  // Decide-and-document threshold: a score of >=2 on both MANAGE items ("a
+  // decision was made and documented," "alternatives were considered even if
+  // informally") is read as "a real decision process happened" -- this
+  // doesn't require the single best answer (3, reviewed by someone else) on
+  // both, matching this project's existing pattern of treating a >=2 answer
+  // as "mostly there" rather than only counting the top option. Either
+  // question left unanswered means the process hasn't happened, not that it's
+  // unknown -- consistent with classifyUseCaseRisk's own no-evidence-means-
+  // least-severe convention, applied here in the opposite direction (no
+  // decision evidence means NOT ready, not "assume it's fine").
+  var readyToProceed = decisionMade !== null && decisionMade >= 2 &&
+    alternativesConsidered !== null && alternativesConsidered >= 2;
+
+  return {
+    tier: classification.tier,
+    compositeScore: classification.compositeScore,
+    annexIiiDomainIds: classification.annexIiiDomainIds,
+    oversight: classification.oversight,
+    decisionReadiness: {
+      decisionMade: decisionMade,
+      alternativesConsidered: alternativesConsidered,
+      readyToProceed: readyToProceed
+    }
+  };
+}
+
+// Decide-and-document, newly authored report-facing copy for this item (same
+// discipline as B4's DEPARTMENTS list / B7's recommendation copy) -- a plain-
+// language summary of evaluateToolAdoption()'s output, not a new regulatory
+// claim. A missing decision process overrides tier entirely: a Tier 4 tool
+// adopted with no go/no-go review is still a process gap worth surfacing, not
+// something the low tier should quietly excuse.
+export function describeToolAdoptionOutcome(evaluation) {
+  var tierLabel = evaluation.tier.label;
+  var oversight = evaluation.oversight;
+  var readiness = evaluation.decisionReadiness;
+  var isHigherTier = evaluation.tier.key === 'tier1' || evaluation.tier.key === 'tier2';
+
+  var headline;
+  if (!readiness.readyToProceed) {
+    headline = 'Pause before proceeding -- the decision process itself is not documented yet';
+  } else if (isHigherTier) {
+    headline = 'Proceed only with the oversight below in place';
+  } else {
+    headline = 'Lower-risk tool -- standard intake is enough';
+  }
+
+  var body;
+  if (!readiness.readyToProceed) {
+    body = 'This tool classifies as ' + tierLabel + ', but a documented, reviewed go/no-go determination (NIST MANAGE 1.1) and a documented comparison against non-AI alternatives (MANAGE 2.1) haven\'t both happened yet. Close that gap before treating this as approved, regardless of tier.';
+  } else if (oversight) {
+    body = 'This tool classifies as ' + tierLabel + '. Oversight expectation at your organization\'s size: ' + oversight.reviewer + ', ' + oversight.cadence.toLowerCase() + (oversight.signoffRequired ? ', with signoff required.' : '.');
+  } else {
+    body = 'This tool classifies as ' + tierLabel + '. No oversight expectation is defined for the selected company size -- treat this as an honest gap in the lookup table, not a "no action needed" signal.';
+  }
+
+  return { headline: headline, body: body };
+}
+

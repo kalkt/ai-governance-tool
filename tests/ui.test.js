@@ -27,10 +27,13 @@ import {
   escapeHtml,
   buildScopeText,
   radioBtn,
-  checkBtn
+  checkBtn,
+  renderToolAdoptionContext,
+  renderToolAdoptionQuestion,
+  renderToolAdoptionResult
 } from '../src/ui.js';
 import { getQuestionsForAssessment } from '../src/logic.js';
-import { TOOL_MASTER_LIST } from '../src/data.js';
+import { TOOL_MASTER_LIST, TOOL_ADOPTION_QUESTIONS, ANNEX_III_DOMAINS } from '../src/data.js';
 
 function setupDom() {
   document.body.innerHTML =
@@ -44,6 +47,9 @@ function setupDom() {
       '<div id="stage-quiz" class="hidden"></div>' +
       '<div id="stage-confidence" class="hidden"></div>' +
       '<div id="stage-report" class="hidden"></div>' +
+      '<div id="stage-tool-adoption-context" class="hidden"></div>' +
+      '<div id="stage-tool-adoption-quiz" class="hidden"></div>' +
+      '<div id="stage-tool-adoption-result" class="hidden"></div>' +
     '</div>';
 }
 
@@ -840,5 +846,127 @@ describe('pure string-builder helpers', () => {
     expect(radioBtn('x', 'y', 'Label', false)).not.toContain('selected');
     expect(checkBtn('x', 'y', 'Label', true)).toContain('checked');
     expect(checkBtn('x', 'y', 'Label', false)).not.toContain('checked');
+  });
+});
+
+describe('New AI Tool Adoption assessment (B13)', () => {
+  it('the intro stage offers both assessment types', () => {
+    mountApp();
+    const html = document.getElementById('stage-intro').innerHTML;
+    expect(html).toContain('Governance Readiness');
+    expect(html).toContain('New AI Tool Adoption');
+  });
+
+  it('picking "Governance Readiness" sets state.assessmentType and shows the scope stage', () => {
+    mountApp();
+    document.getElementById('btn-start').click();
+    expect(state.assessmentType).toBe('governance-readiness');
+    expect(document.getElementById('stage-scope').classList.contains('hidden')).toBe(false);
+  });
+
+  it('picking "New AI Tool Adoption" sets state.assessmentType and shows the context stage', () => {
+    mountApp();
+    document.getElementById('btn-start-adoption').click();
+    expect(state.assessmentType).toBe('tool-adoption');
+    expect(document.getElementById('stage-tool-adoption-context').classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('stage-intro').classList.contains('hidden')).toBe(true);
+  });
+
+  it('renders one checkbox per ANNEX_III_DOMAINS entry, and toggling one updates state.toolAdoption.annexIiiDomainIds', () => {
+    renderToolAdoptionContext();
+    const boxes = document.querySelectorAll('#annex-iii-grid .check-opt');
+    expect(boxes.length).toBe(ANNEX_III_DOMAINS.length);
+
+    const box = document.querySelector('#annex-iii-grid .check-opt[data-value="employment-worker-management"] input');
+    box.checked = true;
+    box.dispatchEvent(new Event('change'));
+    expect(state.toolAdoption.annexIiiDomainIds).toContain('employment-worker-management');
+
+    box.checked = false;
+    box.dispatchEvent(new Event('change'));
+    expect(state.toolAdoption.annexIiiDomainIds).not.toContain('employment-worker-management');
+  });
+
+  it('requires an organization size before continuing to the quiz', () => {
+    renderToolAdoptionContext();
+    document.getElementById('btn-next-ta-context').click();
+    expect(document.getElementById('err-ta-size').classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('stage-tool-adoption-quiz').classList.contains('hidden')).toBe(true);
+
+    document.querySelector('.radio-opt[data-name="taSize"][data-value="11-50"]').click();
+    expect(state.toolAdoption.companySize).toBe('11-50');
+    document.getElementById('btn-next-ta-context').click();
+    expect(document.getElementById('stage-tool-adoption-quiz').classList.contains('hidden')).toBe(false);
+  });
+
+  it('back from the context stage returns to the intro', () => {
+    renderToolAdoptionContext();
+    document.getElementById('btn-back-ta-context').click();
+    expect(document.getElementById('stage-intro').classList.contains('hidden')).toBe(false);
+  });
+
+  it('walks through all 9 questions end-to-end, recording each answer and reaching the result stage', () => {
+    state.toolAdoption.companySize = '11-50';
+    state.toolAdoption.idx = 0;
+    renderToolAdoptionQuestion();
+
+    TOOL_ADOPTION_QUESTIONS.forEach(function(q, i) {
+      expect(document.getElementById('stage-tool-adoption-quiz').innerHTML).toContain(q.text);
+      document.querySelector('#ta-opts .opt[data-v="2"]').click();
+      expect(state.toolAdoption.answers[q.id]).toBe(2);
+      document.getElementById('btn-next-ta-q').click();
+      if (i < TOOL_ADOPTION_QUESTIONS.length - 1) {
+        expect(document.getElementById('stage-tool-adoption-quiz').classList.contains('hidden')).toBe(false);
+      }
+    });
+
+    expect(document.getElementById('stage-tool-adoption-result').classList.contains('hidden')).toBe(false);
+  });
+
+  it('requires an answer before advancing to the next question', () => {
+    state.toolAdoption.idx = 0;
+    renderToolAdoptionQuestion();
+    document.getElementById('btn-next-ta-q').click();
+    expect(document.getElementById('err-ta').classList.contains('hidden')).toBe(false);
+  });
+
+  it('back on the first question returns to the context stage; back on a later one decrements idx', () => {
+    state.toolAdoption.idx = 0;
+    renderToolAdoptionQuestion();
+    document.getElementById('btn-back-ta-q').click();
+    expect(document.getElementById('stage-tool-adoption-context').classList.contains('hidden')).toBe(false);
+
+    state.toolAdoption.idx = 2;
+    renderToolAdoptionQuestion();
+    document.getElementById('btn-back-ta-q').click();
+    expect(state.toolAdoption.idx).toBe(1);
+  });
+
+  it('renders the tier pill, headline, and body text, with the Annex III callout only when a domain was selected', () => {
+    state.toolAdoption.companySize = '1-10';
+    state.toolAdoption.annexIiiDomainIds = [];
+    TOOL_ADOPTION_QUESTIONS.forEach(function(q) { state.toolAdoption.answers[q.id] = 0; });
+    state.toolAdoption.answers['ma-adopt-1'] = 3;
+    state.toolAdoption.answers['ma-adopt-2'] = 3;
+    renderToolAdoptionResult();
+    let html = document.getElementById('stage-tool-adoption-result').innerHTML;
+    expect(html).toContain('tier-pill');
+    expect(html).toContain('Tier 4');
+    expect(html).not.toContain('Annex III high-risk domain');
+
+    state.toolAdoption.annexIiiDomainIds = ['biometrics'];
+    renderToolAdoptionResult();
+    html = document.getElementById('stage-tool-adoption-result').innerHTML;
+    expect(html).toContain('Annex III high-risk domain');
+  });
+
+  it('"Assess another tool" resets toolAdoption state and returns to the context stage', () => {
+    state.toolAdoption.companySize = '1-10';
+    state.toolAdoption.annexIiiDomainIds = ['biometrics'];
+    TOOL_ADOPTION_QUESTIONS.forEach(function(q) { state.toolAdoption.answers[q.id] = 2; });
+    renderToolAdoptionResult();
+    document.getElementById('btn-restart-ta').click();
+    expect(state.toolAdoption).toEqual({ annexIiiDomainIds: [], companySize: null, answers: {}, idx: 0 });
+    expect(document.getElementById('stage-tool-adoption-context').classList.contains('hidden')).toBe(false);
   });
 });

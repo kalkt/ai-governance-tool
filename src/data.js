@@ -308,6 +308,117 @@ export const REGULATORY_INDUSTRY_NOTES = {
   government: 'FedRAMP authorization is typically required for AI tools used by US government agencies.'
 };
 
+// ============================================================================
+// B13: New AI Tool Adoption assessment (backlog SS1.4.7) -- a genuinely
+// separate assessment type from Governance Readiness, not a mode of it. It
+// answers "should this one specific AI tool's use proceed," not "how ready
+// is the org." Two parts:
+//
+// 1. The seven RISK_CRITERIA questions below (B6, same criteria, same
+//    risk-forward 0=lowest/3=highest polarity) -- this assessment's own
+//    context-capture step for the EU AI Act Annex III domain list (already
+//    exported above as ANNEX_III_DOMAINS) supplies the other half of
+//    classifyUseCaseRisk()'s input. ids deliberately match RISK_CRITERIA's
+//    own strings exactly so this assessment's answers object IS already the
+//    useCaseAnswers shape classifyUseCaseRisk() expects, no mapping step.
+// 2. Two new decision-point questions, ids `ma-adopt-1`/`ma-adopt-2`, per
+//    SS1.4.7/R1: MANAGE 1.1 and MANAGE 2.1 were deliberately excluded from
+//    the Governance Readiness item bank (R8 part 2) because they're
+//    decision-point questions ("should this proceed"), not readiness-point
+//    ones -- and earmarked as this item's own first genuinely-new authoring
+//    work. Grounded directly in NIST AI RMF 1.0 (Jan 2023) Core subcategory
+//    text (see each question's own `nistRef`), governance-maturity polarity
+//    (0=worst/3=best) since these ARE real MANAGE-function questions, unlike
+//    the risk-criteria block above.
+//
+// AUTHORSHIP-REVIEW FLAG (backlog SS1.6 rule 7, standing project rule): the
+// question wording below -- especially the two ma-adopt-* items, since
+// nothing drafted them before this item started -- is new authored content,
+// not a verified external fact. Per that standing rule, new authored
+// item-bank content gets a Kartik review/approval pass before being treated
+// as final, the same discipline R8's 33 drafted items went through before
+// B8/B9 wired them in. It IS wired into this file and the UI already (so the
+// assessment type is actually usable/demonstrable, matching this project's
+// live-portfolio-piece bar), but should be read as a reviewable draft, not
+// pre-approved, until Kartik confirms the wording.
+// ============================================================================
+export const TOOL_ADOPTION_QUESTIONS = [
+  { id: 'materiality', kind: 'risk-criteria',
+    text: "If this AI tool's output were wrong, how much real-world impact would that have?",
+    options: [
+      { v: 0, label: 'Low stakes -- a wrong output is a minor inconvenience (e.g. a poorly-worded internal draft)' },
+      { v: 1, label: 'Moderate -- a wrong output would need correcting and could cause some rework or minor customer friction' },
+      { v: 2, label: 'High -- a wrong output could cause real financial, legal, or reputational harm before anyone catches it' },
+      { v: 3, label: "Severe -- a wrong output could cause serious harm to a person's safety, finances, legal standing, or access to a service" }
+    ]},
+  { id: 'autonomy', kind: 'risk-criteria',
+    text: "How much does a person review this tool's output before it takes effect?",
+    options: [
+      { v: 0, label: 'A person reviews and approves every output before it is used or sent' },
+      { v: 1, label: 'A person reviews most outputs, with occasional exceptions' },
+      { v: 2, label: 'A person spot-checks some outputs, but most go through unreviewed' },
+      { v: 3, label: 'The tool acts or sends output on its own, with no routine human review' }
+    ]},
+  { id: 'dataSensitivity', kind: 'risk-criteria',
+    text: 'What kind of data does this tool process?',
+    options: [
+      { v: 0, label: 'Public or already-published information only' },
+      { v: 1, label: 'Internal business information, nothing personal or regulated' },
+      { v: 2, label: 'Personal information about customers or employees (names, contact info, usage data)' },
+      { v: 3, label: 'Sensitive regulated data -- health, financial, biometric, or data about children' }
+    ]},
+  { id: 'consequentialDecisions', kind: 'risk-criteria',
+    text: 'Does this tool make or materially influence a decision about a specific person?',
+    options: [
+      { v: 0, label: 'No -- it does not touch decisions about individual people at all' },
+      { v: 1, label: 'It provides background information a person then uses to decide' },
+      { v: 2, label: "It produces a recommendation that's usually followed with limited scrutiny" },
+      { v: 3, label: 'It directly determines or gates a consequential outcome for a person (hiring, credit, benefits, discipline, pricing, access)' }
+    ]},
+  { id: 'populationAffected', kind: 'risk-criteria',
+    text: "How many people, and how vulnerable a population, does this tool's use touch?",
+    options: [
+      { v: 0, label: 'A handful of internal staff, none of them a vulnerable population' },
+      { v: 1, label: 'A larger internal group or a small external group' },
+      { v: 2, label: 'A broad customer base or the general public' },
+      { v: 3, label: 'A large population that includes people less able to advocate for themselves (children, people with disabilities, people in crisis, applicants for essential services)' }
+    ]},
+  { id: 'reversibility', kind: 'risk-criteria',
+    text: 'If this tool produces a bad outcome, how hard is it to undo?',
+    options: [
+      { v: 0, label: 'Easy -- fully reversible with no lasting effect (e.g. redo the task)' },
+      { v: 1, label: 'Correctable -- takes some effort, but a full fix is realistic' },
+      { v: 2, label: 'Difficult -- real effort or cost to unwind, and some harm may already have occurred' },
+      { v: 3, label: "Irreversible -- once it happens it can't meaningfully be undone (a decision was acted on, information was already disclosed, a person already experienced the harm)" }
+    ]},
+  { id: 'thirdPartyDependency', kind: 'risk-criteria',
+    text: 'How much visibility or control do you have over how this tool actually works?',
+    options: [
+      { v: 0, label: 'Fully in-house, or a vendor tool whose behavior and data handling you can fully inspect and control' },
+      { v: 1, label: 'A vendor tool with a documented, reviewed data-processing agreement and reasonable transparency' },
+      { v: 2, label: 'A vendor tool you rely on without a reviewed agreement, or with limited visibility into how it processes your data' },
+      { v: 3, label: 'A black-box third-party or subcontracted-model dependency with no meaningful visibility into how it works or where your data goes' }
+    ]},
+  { id: 'ma-adopt-1', kind: 'decision', fn: 'manage', nistRef: 'NIST AI RMF 1.0 (Jan 2023), Core, MANAGE 1.1',
+    text: 'Has a real go/no-go decision been made about whether this AI tool actually achieves what you need it to, before rolling it out?',
+    hint: 'NIST AI RMF MANAGE 1.1 -- a documented determination of whether the system\'s development or deployment should proceed, not just "we started using it."',
+    options: [
+      { v: 0, label: 'No determination was made -- the tool is already in use, or about to be, without anyone evaluating whether it does what is needed' },
+      { v: 1, label: "An informal decision was made (a conversation or a quick trial), but it wasn't documented and no one specific owns it" },
+      { v: 2, label: "A decision was made and is documented, but it wasn't reviewed by anyone beyond the person proposing the tool" },
+      { v: 3, label: 'A documented go/no-go determination was made, reviewed by someone other than the requester, based on whether the tool actually achieves its intended purpose' }
+    ]},
+  { id: 'ma-adopt-2', kind: 'decision', fn: 'manage', nistRef: 'NIST AI RMF 1.0 (Jan 2023), Core, MANAGE 2.1',
+    text: 'Before adopting this tool, did you weigh its resource requirements and risk against realistic alternatives -- including doing this without AI?',
+    hint: 'NIST AI RMF MANAGE 2.1 -- considering viable non-AI alternatives is part of this determination, not an afterthought.',
+    options: [
+      { v: 0, label: 'No comparison was made -- the tool was adopted without weighing it against any alternative' },
+      { v: 1, label: 'Alternatives were mentioned in passing but never seriously evaluated' },
+      { v: 2, label: 'Alternatives were considered informally (a short discussion), but not documented' },
+      { v: 3, label: 'A documented comparison was made against at least one realistic alternative -- including a non-AI approach -- covering cost and risk tradeoffs' }
+    ]}
+];
+
 // Base NIST questions (from v1, unchanged)
 export const BASE_QUESTIONS = [
   { id: 'g1', fn: 'govern', module: 'base', dimension: 'controls-evidence', visibilityTag: 'strategic', depths: ['quick','standard','comprehensive'],

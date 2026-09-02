@@ -26,7 +26,9 @@ import {
   CONFIDENCE_QUESTIONS,
   LIKERT_OPTIONS,
   SCOPE_OPTIONS,
-  ROLE_OPTIONS
+  ROLE_OPTIONS,
+  ANNEX_III_DOMAINS,
+  TOOL_ADOPTION_QUESTIONS
 } from './data.js';
 import {
   getApplicableModules,
@@ -47,7 +49,9 @@ import {
   applyRoleFraming,
   computeRegulatoryExposure,
   computeToolPortfolioRisk,
-  computeFrameworkCoverage
+  computeFrameworkCoverage,
+  evaluateToolAdoption,
+  describeToolAdoptionOutcome
 } from './logic.js';
 
 // ============================================================================
@@ -74,7 +78,14 @@ export function initialState() {
     questions: [],
     answers: {},
     idx: 0,
-    confidenceAnswers: {}     // self-reported Likert 1-5, keyed by NIST function id
+    confidenceAnswers: {},    // self-reported Likert 1-5, keyed by NIST function id
+    assessmentType: null,     // B13: 'governance-readiness' | 'tool-adoption' -- picked at stage-intro
+    toolAdoption: {           // B13: New AI Tool Adoption's own state, deliberately separate from
+      annexIiiDomainIds: [],  // the readiness fields above rather than reusing answers/idx/questions --
+      companySize: null,      // these are two genuinely separate assessment types (SS1.4.7), not two
+      answers: {},            // modes of one flow, so their in-progress state shouldn't be shared/mixed.
+      idx: 0
+    }
   };
 }
 
@@ -95,7 +106,8 @@ export function resetState() {
 
 export function el(id) { return document.getElementById(id); }
 export function hideAll() {
-  ['stage-intro','stage-scope','stage-profile','stage-tools','stage-depth','stage-quiz','stage-confidence','stage-report'].forEach(function(s) {
+  ['stage-intro','stage-scope','stage-profile','stage-tools','stage-depth','stage-quiz','stage-confidence','stage-report',
+   'stage-tool-adoption-context','stage-tool-adoption-quiz','stage-tool-adoption-result'].forEach(function(s) {
     el(s).classList.add('hidden');
   });
 }
@@ -134,13 +146,173 @@ export function renderIntro() {
     '<div class="hero">' +
       '<p class="kicker">AI governance readiness</p>' +
       '<h1>How ready is your business for AI?</h1>' +
-      '<p class="lede">A NIST AI Risk Management Framework based assessment, built for small and medium businesses adopting AI tools. This version adds profile-tailored questions for nonprofits and youth-serving organizations.</p>' +
+      '<p class="lede">A NIST AI Risk Management Framework based toolkit for small and medium businesses. Two assessments live here -- how ready your governance program is overall, and whether one specific AI tool should move forward.</p>' +
     '</div>' +
-    '<div class="callout info">' +
-      '<strong>What you get:</strong> A structured 15-30 minute assessment across four NIST functions (Govern, Map, Measure, Manage), plus additional modules that apply if your organization is a nonprofit or serves people under 18. Report includes a risk tier, gap map, prioritized recommendations, and an objective classification of AI tools you already use.' +
+    '<div class="choice-grid">' +
+      '<button id="btn-start" class="choice">' +
+        '<h3>Governance Readiness</h3>' +
+        '<p>A structured 15-30 minute assessment across four NIST functions (Govern, Map, Measure, Manage), plus modules for nonprofits and youth-serving organizations. Produces a risk tier, gap map, and prioritized recommendations.</p>' +
+      '</button>' +
+      '<button id="btn-start-adoption" class="choice">' +
+        '<h3>New AI Tool Adoption</h3>' +
+        '<p>A shorter, decision-focused check for one specific AI tool -- what risk tier it falls into, what oversight it needs, and whether a real go/no-go decision has actually been made.</p>' +
+      '</button>' +
+    '</div>';
+  el('btn-start').addEventListener('click', function() {
+    state.assessmentType = 'governance-readiness';
+    renderScope();
+  });
+  el('btn-start-adoption').addEventListener('click', function() {
+    state.assessmentType = 'tool-adoption';
+    renderToolAdoptionContext();
+  });
+}
+
+// ============================================================================
+// B13: New AI Tool Adoption assessment -- deliberately its own render pipeline
+// (renderToolAdoptionContext -> renderToolAdoptionQuestion -> ...Result),
+// separate from the Governance Readiness stages above, matching how
+// state.toolAdoption is kept separate from state.answers/questions/idx.
+// ============================================================================
+
+export function renderToolAdoptionContext() {
+  show('stage-tool-adoption-context');
+  el('stepper').classList.add('hidden');
+  var ta = state.toolAdoption;
+
+  el('stage-tool-adoption-context').innerHTML = '' +
+    '<div class="hero">' +
+      '<p class="kicker">New AI Tool Adoption -- step 1 of 3</p>' +
+      '<h1>What is this tool being used for?</h1>' +
+      '<p class="lede">This assessment classifies one specific AI tool or use case, not your organization overall. Answer about that one tool.</p>' +
     '</div>' +
-    '<div class="row" style="margin-top: 1rem;"><button id="btn-start" class="primary">Start</button></div>';
-  el('btn-start').addEventListener('click', renderScope);
+    '<div class="field-group">' +
+      '<label class="field-label">Does this tool\'s use touch any of the following areas?</label>' +
+      '<p class="field-hint">The EU AI Act\'s Annex III high-risk domains -- select all that apply. Leave blank if none do.</p>' +
+      '<div class="checkbox-row" id="annex-iii-grid">' +
+        ANNEX_III_DOMAINS.map(function(d) {
+          return checkBtn('annexIii', d.id, d.label, ta.annexIiiDomainIds.indexOf(d.id) !== -1);
+        }).join('') +
+      '</div>' +
+    '</div>' +
+    '<div class="field-group">' +
+      '<label class="field-label">Organization size <span class="field-required">*</span></label>' +
+      '<div class="radio-row">' +
+        radioBtn('taSize', '1-10', '1-10', ta.companySize === '1-10') +
+        radioBtn('taSize', '11-50', '11-50', ta.companySize === '11-50') +
+        radioBtn('taSize', '51-200', '51-200', ta.companySize === '51-200') +
+        radioBtn('taSize', '201-1000', '201-1,000', ta.companySize === '201-1000') +
+        radioBtn('taSize', '1000+', '1,000+', ta.companySize === '1000+') +
+      '</div>' +
+    '</div>' +
+    '<p id="err-ta-size" class="err hidden">Pick an organization size to continue.</p>' +
+    '<div class="row" style="margin-top: 1rem;">' +
+      '<button id="btn-back-ta-context">Back</button>' +
+      '<div style="flex:1"></div>' +
+      '<button id="btn-next-ta-context" class="primary">Continue</button>' +
+    '</div>';
+
+  attachCheckHandlers('annexIii', ta.annexIiiDomainIds);
+  attachRadioHandlers('taSize', function(v) { ta.companySize = v; });
+
+  el('btn-back-ta-context').addEventListener('click', renderIntro);
+  el('btn-next-ta-context').addEventListener('click', function() {
+    if (!ta.companySize) {
+      el('err-ta-size').classList.remove('hidden');
+      return;
+    }
+    ta.idx = 0;
+    renderToolAdoptionQuestion();
+  });
+}
+
+export function renderToolAdoptionQuestion() {
+  show('stage-tool-adoption-quiz');
+  var ta = state.toolAdoption;
+  var q = TOOL_ADOPTION_QUESTIONS[ta.idx];
+  var total = TOOL_ADOPTION_QUESTIONS.length;
+  var pct = Math.round((ta.idx / total) * 100);
+  var sectionLabel = q.kind === 'decision' ? 'Decision check (NIST MANAGE)' : 'Risk classification';
+
+  el('stage-tool-adoption-quiz').innerHTML = '' +
+    '<div class="qcard">' +
+      '<div class="qhead">' +
+        '<span>Question ' + (ta.idx + 1) + ' of ' + total + '</span>' +
+        '<span class="qmodule">' + sectionLabel + '</span>' +
+      '</div>' +
+      '<div class="progress"><span style="width:' + pct + '%"></span></div>' +
+      '<p class="qtext">' + q.text + '</p>' +
+      (q.hint ? '<p class="qmeta">' + q.hint + '</p>' : '') +
+      '<div class="options" id="ta-opts">' +
+        q.options.map(function(o) {
+          return '<label class="opt' + (ta.answers[q.id] === o.v ? ' selected' : '') + '" data-v="' + o.v + '">' +
+                 '<input type="radio" name="ta-q" value="' + o.v + '"' + (ta.answers[q.id] === o.v ? ' checked' : '') + '>' +
+                 '<span>' + o.label + '</span>' +
+                 '</label>';
+        }).join('') +
+      '</div>' +
+      '<p class="err hidden" id="err-ta">Pick an answer to continue.</p>' +
+      '<div class="nav">' +
+        '<button id="btn-back-ta-q">Back</button>' +
+        '<span class="spacer"></span>' +
+        '<button id="btn-next-ta-q" class="primary">' + (ta.idx === total - 1 ? 'See result' : 'Next') + '</button>' +
+      '</div>' +
+    '</div>';
+
+  document.querySelectorAll('#ta-opts .opt').forEach(function(opt) {
+    opt.addEventListener('click', function() {
+      var v = parseInt(opt.getAttribute('data-v'), 10);
+      ta.answers[q.id] = v;
+      document.querySelectorAll('#ta-opts .opt').forEach(function(o) { o.classList.remove('selected'); });
+      opt.classList.add('selected');
+      opt.querySelector('input').checked = true;
+      el('err-ta').classList.add('hidden');
+    });
+  });
+
+  el('btn-back-ta-q').addEventListener('click', function() {
+    if (ta.idx > 0) { ta.idx--; renderToolAdoptionQuestion(); }
+    else { renderToolAdoptionContext(); }
+  });
+  el('btn-next-ta-q').addEventListener('click', function() {
+    if (ta.answers[q.id] === undefined) {
+      el('err-ta').classList.remove('hidden');
+      return;
+    }
+    if (ta.idx === total - 1) {
+      renderToolAdoptionResult();
+    } else {
+      ta.idx++;
+      renderToolAdoptionQuestion();
+    }
+  });
+}
+
+export function renderToolAdoptionResult() {
+  show('stage-tool-adoption-result');
+  var ta = state.toolAdoption;
+  var evaluation = evaluateToolAdoption(ta.answers, ta.annexIiiDomainIds, ta.companySize);
+  var outcome = describeToolAdoptionOutcome(evaluation);
+  var tierCls = (evaluation.tier.key === 'tier1' || evaluation.tier.key === 'tier2') ? 'tier-high' :
+    (evaluation.tier.key === 'tier3' ? 'tier-med' : 'tier-low');
+
+  el('stage-tool-adoption-result').innerHTML = '' +
+    '<div class="hero">' +
+      '<p class="kicker">New AI Tool Adoption -- result</p>' +
+      '<h1>' + outcome.headline + '</h1>' +
+    '</div>' +
+    '<span class="tier-pill ' + tierCls + '">' + evaluation.tier.label + '</span>' +
+    '<p class="lede" style="margin-top: 0.75rem;">' + outcome.body + '</p>' +
+    (evaluation.annexIiiDomainIds.length > 0 ?
+      '<div class="callout warning">This use touches an EU AI Act Annex III high-risk domain, which is why it starts in the Tier 1/2 pair.</div>' : '') +
+    '<div class="row" style="margin-top: 1.5rem;">' +
+      '<button id="btn-restart-ta">Assess another tool</button>' +
+    '</div>';
+
+  el('btn-restart-ta').addEventListener('click', function() {
+    state.toolAdoption = { annexIiiDomainIds: [], companySize: null, answers: {}, idx: 0 };
+    renderToolAdoptionContext();
+  });
 }
 
 export function renderScope() {

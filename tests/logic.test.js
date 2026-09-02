@@ -26,9 +26,11 @@ import {
   computeToolPortfolioRisk,
   computeFrameworkCoverage,
   getVisibilityTagsForRole,
-  meetsAggregationThreshold
+  meetsAggregationThreshold,
+  evaluateToolAdoption,
+  describeToolAdoptionOutcome
 } from '../src/logic.js';
-import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST, AGGREGATION_MIN_GROUP_SIZE } from '../src/data.js';
+import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST, AGGREGATION_MIN_GROUP_SIZE, TOOL_ADOPTION_QUESTIONS } from '../src/data.js';
 
 describe('computeTier', () => {
   it('classifies a score of exactly 70 as low risk (lower boundary of the low tier)', () => {
@@ -1693,5 +1695,140 @@ describe('meetsAggregationThreshold', () => {
     expect(meetsAggregationThreshold(undefined)).toBe(false);
     expect(meetsAggregationThreshold(null)).toBe(false);
     expect(meetsAggregationThreshold('5')).toBe(false);
+  });
+});
+
+// ============================================================================
+// B13: New AI Tool Adoption assessment (backlog SS1.4.7)
+// ============================================================================
+
+describe('TOOL_ADOPTION_QUESTIONS data integrity (B13)', () => {
+  it('has exactly 9 questions: 7 risk-criteria + 2 decision', () => {
+    expect(TOOL_ADOPTION_QUESTIONS.length).toBe(9);
+  });
+
+  it('the first 7 ids match RISK_CRITERIA exactly, in order, tagged kind: risk-criteria', () => {
+    const first7 = TOOL_ADOPTION_QUESTIONS.slice(0, 7);
+    expect(first7.map(q => q.id)).toEqual(RISK_CRITERIA);
+    first7.forEach(q => expect(q.kind).toBe('risk-criteria'));
+  });
+
+  it('the last 2 are the decision-point questions, fn: manage, each with a NIST citation', () => {
+    const last2 = TOOL_ADOPTION_QUESTIONS.slice(7);
+    expect(last2.map(q => q.id)).toEqual(['ma-adopt-1', 'ma-adopt-2']);
+    last2.forEach(q => {
+      expect(q.kind).toBe('decision');
+      expect(q.fn).toBe('manage');
+      expect(q.nistRef).toMatch(/NIST AI RMF/);
+    });
+  });
+
+  it('every question has exactly options v:0,1,2,3, no duplicates', () => {
+    TOOL_ADOPTION_QUESTIONS.forEach(q => {
+      expect(q.options.length).toBe(4);
+      expect(q.options.map(o => o.v).sort()).toEqual([0, 1, 2, 3]);
+    });
+  });
+
+  it('no id collides with an existing question bank', () => {
+    const otherIds = new Set([...BASE_QUESTIONS, ...NONPROFIT_QUESTIONS, ...YOUTH_QUESTIONS].map(q => q.id));
+    TOOL_ADOPTION_QUESTIONS.forEach(q => expect(otherIds.has(q.id)).toBe(false));
+  });
+});
+
+describe('evaluateToolAdoption (B13)', () => {
+  function fullCriteriaAnswers(v) {
+    const a = {};
+    RISK_CRITERIA.forEach(c => { a[c] = v; });
+    return a;
+  }
+
+  it('delegates tier classification to classifyUseCaseRisk exactly (Annex III + high composite -> Tier 1)', () => {
+    const answers = { ...fullCriteriaAnswers(3), 'ma-adopt-1': 3, 'ma-adopt-2': 3 };
+    const result = evaluateToolAdoption(answers, ['employment-worker-management'], '11-50');
+    const direct = classifyUseCaseRisk({ ...fullCriteriaAnswers(3), annexIiiDomainIds: ['employment-worker-management'] }, '11-50');
+    expect(result.tier).toEqual(direct.tier);
+    expect(result.compositeScore).toBe(direct.compositeScore);
+    expect(result.oversight).toEqual(direct.oversight);
+    expect(result.annexIiiDomainIds).toEqual(['employment-worker-management']);
+  });
+
+  it('no Annex III domains + low composite -> Tier 4, oversight looked up for the given size', () => {
+    const answers = { ...fullCriteriaAnswers(0), 'ma-adopt-1': 3, 'ma-adopt-2': 3 };
+    const result = evaluateToolAdoption(answers, [], '1-10');
+    expect(result.tier.key).toBe('tier4');
+    expect(result.oversight).toEqual(getOversightExpectation('tier4', '1-10'));
+  });
+
+  it('readyToProceed is true only when both MANAGE answers are >=2', () => {
+    const base = fullCriteriaAnswers(1);
+    expect(evaluateToolAdoption({ ...base, 'ma-adopt-1': 2, 'ma-adopt-2': 2 }, [], '51-200').decisionReadiness.readyToProceed).toBe(true);
+    expect(evaluateToolAdoption({ ...base, 'ma-adopt-1': 3, 'ma-adopt-2': 3 }, [], '51-200').decisionReadiness.readyToProceed).toBe(true);
+    expect(evaluateToolAdoption({ ...base, 'ma-adopt-1': 1, 'ma-adopt-2': 3 }, [], '51-200').decisionReadiness.readyToProceed).toBe(false);
+    expect(evaluateToolAdoption({ ...base, 'ma-adopt-1': 3, 'ma-adopt-2': 1 }, [], '51-200').decisionReadiness.readyToProceed).toBe(false);
+  });
+
+  it('an unanswered MANAGE question means not ready, not unknown-and-assumed-fine', () => {
+    const base = fullCriteriaAnswers(1);
+    const result = evaluateToolAdoption({ ...base, 'ma-adopt-1': 3 }, [], '51-200');
+    expect(result.decisionReadiness.alternativesConsidered).toBeNull();
+    expect(result.decisionReadiness.readyToProceed).toBe(false);
+  });
+
+  it('reports decisionMade/alternativesConsidered as the raw answer values', () => {
+    const base = fullCriteriaAnswers(1);
+    const result = evaluateToolAdoption({ ...base, 'ma-adopt-1': 1, 'ma-adopt-2': 2 }, [], '51-200');
+    expect(result.decisionReadiness.decisionMade).toBe(1);
+    expect(result.decisionReadiness.alternativesConsidered).toBe(2);
+  });
+});
+
+describe('describeToolAdoptionOutcome (B13)', () => {
+  function fullCriteriaAnswers(v) {
+    const a = {};
+    RISK_CRITERIA.forEach(c => { a[c] = v; });
+    return a;
+  }
+
+  it('not ready to proceed -> pause headline, regardless of how low-risk the tier is', () => {
+    const evaluation = evaluateToolAdoption({ ...fullCriteriaAnswers(0), 'ma-adopt-1': 0, 'ma-adopt-2': 0 }, [], '1-10');
+    const outcome = describeToolAdoptionOutcome(evaluation);
+    expect(outcome.headline).toMatch(/Pause before proceeding/);
+    expect(outcome.body).toMatch(/MANAGE 1\.1/);
+    expect(outcome.body).toMatch(/MANAGE 2\.1/);
+  });
+
+  it('ready + Tier 1/2 -> "proceed only with oversight" headline', () => {
+    const evaluation = evaluateToolAdoption(
+      { ...fullCriteriaAnswers(3), 'ma-adopt-1': 3, 'ma-adopt-2': 3 },
+      ['law-enforcement'],
+      '201-1000'
+    );
+    const outcome = describeToolAdoptionOutcome(evaluation);
+    expect(evaluation.tier.key).toBe('tier1');
+    expect(outcome.headline).toMatch(/Proceed only with the oversight below/);
+    expect(outcome.body).toMatch(evaluation.oversight.reviewer);
+  });
+
+  it('ready + Tier 3/4 -> "standard intake is enough" headline', () => {
+    const evaluation = evaluateToolAdoption(
+      { ...fullCriteriaAnswers(0), 'ma-adopt-1': 3, 'ma-adopt-2': 3 },
+      [],
+      '11-50'
+    );
+    const outcome = describeToolAdoptionOutcome(evaluation);
+    expect(evaluation.tier.key).toBe('tier4');
+    expect(outcome.headline).toMatch(/standard intake is enough/);
+  });
+
+  it('a null oversight lookup is stated as an honest gap, not "no action needed"', () => {
+    const evaluation = evaluateToolAdoption(
+      { ...fullCriteriaAnswers(2), 'ma-adopt-1': 3, 'ma-adopt-2': 3 },
+      ['biometrics'],
+      'not-a-real-size-band'
+    );
+    expect(evaluation.oversight).toBeNull();
+    const outcome = describeToolAdoptionOutcome(evaluation);
+    expect(outcome.body).toMatch(/honest gap/);
   });
 });
