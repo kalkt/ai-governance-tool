@@ -129,6 +129,22 @@ export const DEPARTMENTS = [
   { id: 'other', label: 'Other / Not listed' }
 ];
 
+// Minimum group size before any role/department-level breakdown is shown in
+// a future comparison report (B20/B21) -- backlog SS1.4.14 (B12). "Aggregate
+// only, always" -- no individual respondent's answers are ever shown by name
+// to anyone else at their organization (Kartik's resolved decision,
+// 2026-09-02) -- isn't itself sufficient once a group has only 1-2
+// respondents: row-level metadata (department, role, depth, timestamp) can
+// re-identify a lone respondent even though Respondent (SS1.4.13) has no
+// name/email field to begin with. Below this threshold, a comparison report
+// should fold the group into a combined/other bucket or omit the breakdown
+// with a stated reason, rather than showing it standalone. 5 is a starting
+// point, not asserted as final -- flagged for Kartik's review same as
+// DEPARTMENTS above. No call site yet -- B20's job once the comparison
+// feature is built; meetsAggregationThreshold() (logic.js) is the pure
+// function that reads this.
+export const AGGREGATION_MIN_GROUP_SIZE = 5;
+
 // R9's four functional-visibility tags (backlog SS1.4.12): which
 // organizational vantage point can answer a given item with real evidence --
 // orthogonal to respondent role (ROLE_OPTIONS above). 'strategic' per R9's

@@ -17,7 +17,8 @@ import {
   SMALL_ORG_SIZE_BANDS,
   OVERSIGHT_EXPECTATIONS,
   REGULATORY_INDUSTRY_NOTES,
-  VISIBILITY_TAGS
+  VISIBILITY_TAGS,
+  AGGREGATION_MIN_GROUP_SIZE
 } from './data.js';
 
 export function getApplicableModules(profile) {
@@ -715,3 +716,18 @@ export function getVisibilityTagsForRole(role) {
   if (role.id === 'leadership') return VISIBILITY_TAGS.slice();
   return getVisibilityTagsForDepartment(role.department);
 }
+
+// ============================================================================
+// AGGREGATION THRESHOLD (B12, backlog SS1.4.14): whether a group of
+// respondents is large enough to show a role/department-level breakdown in a
+// future comparison report without risking re-identifying an individual --
+// enforces the "aggregate only, always" decision at the point B20 will
+// actually compute a breakdown, not just in how B21 renders it. No call site
+// yet -- B20's job once the comparison feature is built. A non-number input
+// (missing/undefined count) is treated as not meeting the threshold rather
+// than throwing, consistent with this file's existing null-safety style.
+// ============================================================================
+export function meetsAggregationThreshold(count) {
+  return typeof count === 'number' && count >= AGGREGATION_MIN_GROUP_SIZE;
+}
+

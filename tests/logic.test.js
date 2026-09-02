@@ -25,9 +25,10 @@ import {
   computeRegulatoryExposure,
   computeToolPortfolioRisk,
   computeFrameworkCoverage,
-  getVisibilityTagsForRole
+  getVisibilityTagsForRole,
+  meetsAggregationThreshold
 } from '../src/logic.js';
-import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST } from '../src/data.js';
+import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST, AGGREGATION_MIN_GROUP_SIZE } from '../src/data.js';
 
 describe('computeTier', () => {
   it('classifies a score of exactly 70 as low risk (lower boundary of the low tier)', () => {
@@ -1660,5 +1661,37 @@ describe("original 20 base questions -- retroactive visibilityTag pass (same-day
   it('every VISIBILITY_TAGS value is used by at least one of the original 20 -- the pass did not default everything to one tag', () => {
     const usedTags = new Set(ORIGINAL_20_IDS.map(id => BASE_QUESTIONS.find(bq => bq.id === id).visibilityTag));
     VISIBILITY_TAGS.forEach(tag => expect(usedTags.has(tag)).toBe(true));
+  });
+});
+
+// ============================================================================
+// B12: meetsAggregationThreshold / AGGREGATION_MIN_GROUP_SIZE (backlog SS1.4.14)
+// ============================================================================
+
+describe('meetsAggregationThreshold', () => {
+  it('AGGREGATION_MIN_GROUP_SIZE is a positive integer, and does not collide with an existing threshold constant', () => {
+    expect(Number.isInteger(AGGREGATION_MIN_GROUP_SIZE)).toBe(true);
+    expect(AGGREGATION_MIN_GROUP_SIZE).toBeGreaterThan(0);
+    expect(AGGREGATION_MIN_GROUP_SIZE).not.toBe(GOVERNANCE_GATING_THRESHOLD);
+  });
+
+  it('a count below the threshold does not meet it', () => {
+    expect(meetsAggregationThreshold(AGGREGATION_MIN_GROUP_SIZE - 1)).toBe(false);
+    expect(meetsAggregationThreshold(0)).toBe(false);
+    expect(meetsAggregationThreshold(1)).toBe(false);
+  });
+
+  it('a count exactly at the threshold meets it (inclusive boundary)', () => {
+    expect(meetsAggregationThreshold(AGGREGATION_MIN_GROUP_SIZE)).toBe(true);
+  });
+
+  it('a count above the threshold meets it', () => {
+    expect(meetsAggregationThreshold(AGGREGATION_MIN_GROUP_SIZE + 50)).toBe(true);
+  });
+
+  it('a missing or non-numeric count does not meet the threshold rather than throwing', () => {
+    expect(meetsAggregationThreshold(undefined)).toBe(false);
+    expect(meetsAggregationThreshold(null)).toBe(false);
+    expect(meetsAggregationThreshold('5')).toBe(false);
   });
 });
