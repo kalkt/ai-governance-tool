@@ -953,3 +953,61 @@ export function buildExecutiveSummary(recs, regulatoryExposure, toolPortfolioRis
   return headline + exposureLine;
 }
 
+// ============================================================================
+// B15: drill-down from summary gap counts/scores into itemized reasoning
+// (backlog SS1.4.8). Each function below answers the same question for a
+// different summary number in the report: "which specific answered
+// questions produced this?" This is real traceability (B17 quality standard
+// #1: "every score traces to specific responses"), not new computation --
+// each one filters/maps state already produced by identifyGaps()/
+// computeScores(), never recomputing a score.
+//
+// SOURCING NOTE, stated plainly: B15's own backlog note names R15's drafted
+// glossary (plain-language NIST term definitions) as "a natural fit" for
+// this item's drill-down interactions -- e.g. a definition inline when
+// drilling into NIST-jargon-heavy finding. This Claude Code session cannot
+// read research-r15-nist-glossary-terms.md (a Cowork Project doc, same
+// access limitation already documented for B10's R4-R6 sourcing) and R15's
+// own condensed backlog summary (SS1.5, "R15") gives category counts, not
+// the 19 terms' actual definitions -- nothing to safely reuse without
+// inventing text R15 doesn't record here. The glossary/tooltip layer is
+// therefore NOT built in this item; deferred until R15's actual draft can be
+// reviewed against the real doc. What IS built is B15's own primary,
+// literal spec -- "drill-down from summary gap counts into itemized
+// reasoning" -- using content this repo already has in full.
+// ============================================================================
+
+// Which specific question-level gaps (identifyGaps() output) produced a
+// given priority's count in the report's stat grid.
+export function explainGapsByPriority(gaps, priority) {
+  return gaps.filter(function(g) { return g.priority === priority; }).map(function(g) {
+    var opt = g.q.options.find(function(o) { return o.v === g.v; });
+    return { id: g.q.id, text: g.q.text, fn: g.fn, v: g.v, label: opt ? opt.label : null };
+  });
+}
+
+// Which specific answered questions rolled into one GOVERNANCE_DIMENSIONS
+// score (computeScores()'s dimensionPct[dimensionId]) -- an unanswered
+// question at this depth/module never contributed to that percentage, so it
+// is excluded here too, consistent with computeScores()'s own accounting.
+export function explainDimension(questions, answers, dimensionId) {
+  return questions.filter(function(q) { return q.dimension === dimensionId && answers[q.id] !== undefined; })
+    .map(function(q) {
+      var v = answers[q.id];
+      var opt = q.options.find(function(o) { return o.v === v; });
+      return { id: q.id, text: q.text, fn: q.fn, v: v, label: opt ? opt.label : null };
+    });
+}
+
+// Which specific answered questions rolled into one NIST function's score
+// (computeScores()'s fnScores[fn] -- also Framework Coverage Mapping's
+// per-function pct, since it's built directly on fnScores).
+export function explainFunctionScore(questions, answers, fn) {
+  return questions.filter(function(q) { return q.fn === fn && answers[q.id] !== undefined; })
+    .map(function(q) {
+      var v = answers[q.id];
+      var opt = q.options.find(function(o) { return o.v === v; });
+      return { id: q.id, text: q.text, dimension: q.dimension || null, v: v, label: opt ? opt.label : null };
+    });
+}
+

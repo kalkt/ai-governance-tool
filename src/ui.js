@@ -55,6 +55,9 @@ import {
   buildReportExport,
   recommendationsToCsv,
   buildExecutiveSummary,
+  explainGapsByPriority,
+  explainDimension,
+  explainFunctionScore,
   GOVERNANCE_GATING_THRESHOLD,
   evaluateToolAdoption,
   describeToolAdoptionOutcome
@@ -943,6 +946,23 @@ function sectionHeading(n, title) {
   return '<p class="kicker">Section ' + n + ' of 9</p><h2>' + title + '</h2>';
 }
 
+// B15 (backlog SS1.4.8): renders one drill-down panel's itemized content --
+// items is one of explainGapsByPriority()/explainDimension()/
+// explainFunctionScore()'s return shapes (all {id, text, v, label, ...}).
+// Hidden by default; toggled by the delegated click handler at the bottom
+// of renderReport(). Rendered once per summary element up front rather than
+// built lazily on first click -- this report's data sets are small (at most
+// ~53 questions), so there's no real cost to always having the content
+// ready, and it keeps the toggle handler a plain classList.toggle().
+function drillPanel(id, items) {
+  return '<div class="drill-panel hidden" id="' + id + '">' +
+    (items.length === 0 ? '<p class="qmeta">No answered questions here yet.</p>' :
+      '<ul class="drill-list">' + items.map(function(it) {
+        return '<li><p class="drill-q">' + escapeHtml(it.text) + '</p><p class="qmeta">Answered: ' + escapeHtml(it.label || 'No answer on file') + '</p></li>';
+      }).join('') + '</ul>') +
+  '</div>';
+}
+
 export function renderReport() {
   show('stage-report');
   renderStepper('report');
@@ -995,13 +1015,22 @@ export function renderReport() {
     '<p class="lede">Based on the NIST AI Risk Management Framework' + (industryLabel ? ', tailored for ' + industryLabel : '') + '.</p></div>';
 
   // ---- 1. Executive Summary ----
+  // B15: "High-priority gaps" -- renamed here from B14's carried-over
+  // "Critical gaps" label, closing a naming collision the backlog had
+  // already flagged for the report rebuild to resolve (B7's own
+  // priority:'critical' dimension-level finding is a different, newer
+  // "critical" than this stat's question-level highCount, and B14 should
+  // have renamed this but didn't -- caught while wiring this exact tile's
+  // drill-down, so fixed here instead of carrying the debt further).
   html += '<div class="section">' + sectionHeading(1, 'Executive Summary') +
     '<div class="stat-grid">' +
       '<div class="stat"><p class="stat-label">Overall readiness</p><p class="stat-value">' + scores.overall + '%</p></div>' +
       '<div class="stat"><p class="stat-label">Risk tier</p><p class="stat-value small"><span class="tier-pill ' + tier.cssClass + '">' + tier.label + '</span></p></div>' +
-      '<div class="stat"><p class="stat-label">Critical gaps</p><p class="stat-value">' + highCount + '</p></div>' +
-      '<div class="stat"><p class="stat-label">Moderate gaps</p><p class="stat-value">' + medCount + '</p></div>' +
+      '<button class="stat drillable" type="button" data-drill="drill-panel-high" aria-expanded="false"><p class="stat-label">High-priority gaps</p><p class="stat-value">' + highCount + '</p><p class="drill-hint">Click for detail ▸</p></button>' +
+      '<button class="stat drillable" type="button" data-drill="drill-panel-medium" aria-expanded="false"><p class="stat-label">Moderate gaps</p><p class="stat-value">' + medCount + '</p><p class="drill-hint">Click for detail ▸</p></button>' +
     '</div>' +
+    drillPanel('drill-panel-high', explainGapsByPriority(gaps, 'high')) +
+    drillPanel('drill-panel-medium', explainGapsByPriority(gaps, 'medium')) +
     '<div class="callout">' + tier.desc + '</div>' +
     '<p class="lede" style="margin-top:10px;">' + buildExecutiveSummary(recs, regulatoryExposure, toolPortfolioRisk) + '</p>' +
   '</div>';
@@ -1031,11 +1060,13 @@ export function renderReport() {
     '<div class="fn-grid">' +
       GOVERNANCE_DIMENSIONS.map(function(d) {
         var pct = scores.dimensionPct[d.id];
-        return '<div class="fn"><div class="fn-top"><h3>' + d.label + '</h3><span class="fn-score">' + (pct !== null ? pct + '%' : '—') + '</span></div>' +
+        return '<button class="fn drillable" type="button" data-drill="drill-panel-dim-' + d.id + '" aria-expanded="false">' +
+          '<div class="fn-top"><h3>' + d.label + '</h3><span class="fn-score">' + (pct !== null ? pct + '%' : '—') + '</span></div>' +
           '<div class="bar"><span style="width:' + (pct || 0) + '%"></span></div>' +
-          '<p class="fn-desc">Weight: ' + d.weight + '%</p></div>';
+          '<p class="fn-desc">Weight: ' + d.weight + '%</p><p class="drill-hint">Click for detail ▸</p></button>';
       }).join('') +
     '</div>' +
+    GOVERNANCE_DIMENSIONS.map(function(d) { return drillPanel('drill-panel-dim-' + d.id, explainDimension(state.questions, state.answers, d.id)); }).join('') +
     (gatingActive ? '<div class="callout warning" style="margin-top:10px;">Ownership &amp; Accountability scored in the bottom tier, which caps your overall score regardless of the other four dimensions -- see the Executive Summary above.</div>' : '') +
 
     '<p class="b10-label" style="margin:16px 0 8px;">By NIST function</p>' +
@@ -1043,11 +1074,13 @@ export function renderReport() {
       Object.keys(FRAMEWORK.functions).map(function(k) {
         var s = scores.fnScores[k];
         var pct = s.max === 0 ? 0 : Math.round((s.sum / s.max) * 100);
-        return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3><span class="fn-score">' + pct + '%</span></div>' +
+        return '<button class="fn drillable" type="button" data-drill="drill-panel-scorefn-' + k + '" aria-expanded="false">' +
+          '<div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3><span class="fn-score">' + pct + '%</span></div>' +
           '<div class="bar"><span style="width:' + pct + '%"></span></div>' +
-          '<p class="fn-desc">' + FRAMEWORK.functions[k].desc + '</p></div>';
+          '<p class="fn-desc">' + FRAMEWORK.functions[k].desc + '</p><p class="drill-hint">Click for detail ▸</p></button>';
       }).join('') +
     '</div>' +
+    Object.keys(FRAMEWORK.functions).map(function(k) { return drillPanel('drill-panel-scorefn-' + k, explainFunctionScore(state.questions, state.answers, k)); }).join('') +
 
     '<p class="b10-label" style="margin:16px 0 8px;">Self-perception vs. evidence</p>' +
     '<p class="qmeta" style="margin-bottom:12px;">The evidence score above reflects what you documented. This asks how prepared you said you FEEL, collected separately so it can not just echo the evidence answers back. A large gap in either direction is itself a finding.</p>' +
@@ -1099,11 +1132,13 @@ export function renderReport() {
     '<div class="fn-grid">' +
       Object.keys(FRAMEWORK.functions).map(function(k) {
         var c = frameworkCoverage[k];
-        return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
+        return '<button class="fn drillable" type="button" data-drill="drill-panel-covfn-' + k + '" aria-expanded="false">' +
+          '<div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
           '<span class="tier-pill ' + coverageTierCls(c.status) + '">' + coverageLabel(c.status) + '</span></div>' +
-          '<p class="fn-desc">' + (c.pct !== null ? c.pct + '%' : 'No data') + '</p></div>';
+          '<p class="fn-desc">' + (c.pct !== null ? c.pct + '%' : 'No data') + '</p><p class="drill-hint">Click for detail ▸</p></button>';
       }).join('') +
     '</div>' +
+    Object.keys(FRAMEWORK.functions).map(function(k) { return drillPanel('drill-panel-covfn-' + k, explainFunctionScore(state.questions, state.answers, k)); }).join('') +
   '</div>';
 
   // ---- 7. Risk Register ----
@@ -1180,6 +1215,19 @@ export function renderReport() {
   });
   el('btn-export-csv').addEventListener('click', function() {
     triggerDownload('ai-governance-recommendations.csv', recommendationsToCsv(recs), 'text/csv');
+  });
+
+  // B15: one delegated handler for every drill-down trigger, rather than a
+  // named button+listener per summary element (there are up to 15 of them --
+  // 2 stat tiles, 5 dimensions, 4 NIST-function score bars, 4 coverage
+  // pills). Each trigger's own data-drill names the single panel drillPanel()
+  // already rendered for it above.
+  document.querySelectorAll('.drillable').forEach(function(trigger) {
+    trigger.addEventListener('click', function() {
+      var panel = el(trigger.getAttribute('data-drill'));
+      panel.classList.toggle('hidden');
+      trigger.setAttribute('aria-expanded', panel.classList.contains('hidden') ? 'false' : 'true');
+    });
   });
 }
 

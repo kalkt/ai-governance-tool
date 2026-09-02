@@ -1082,4 +1082,91 @@ describe('nine-section report rebuild (B14)', () => {
     expect(() => triggerDownload('test.json', '{"a":1}', 'application/json')).not.toThrow();
     expect(document.body.children.length).toBe(before); // the synthetic <a> is removed after click
   });
+
+  it('renames the question-level gap-count stat to "High-priority gaps", closing the naming collision flagged against B7\'s dimension-level critical entry', () => {
+    primeReportState();
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('High-priority gaps');
+    expect(html).not.toContain('>Critical gaps<');
+  });
+});
+
+describe('drill-down from summary counts/scores into itemized reasoning (B15)', () => {
+  function primeReportState() {
+    state.scope = { id: 'org', name: '' };
+    state.role = { id: null, department: '' };
+    state.profile.orgType = 'for-profit';
+    state.profile.servesYouth = false;
+    state.depth = 'quick';
+    state.questions = getQuestionsForAssessment(state.profile, 'quick');
+    state.idx = 0;
+    state.answers = {};
+    state.questions.forEach(function(q) { state.answers[q.id] = 0; }); // every question a high-priority gap
+    state.confidenceAnswers = {};
+  }
+
+  it('every drill panel starts hidden, and its trigger reports aria-expanded=false', () => {
+    primeReportState();
+    renderReport();
+    document.querySelectorAll('.drill-panel').forEach(function(panel) {
+      expect(panel.classList.contains('hidden')).toBe(true);
+    });
+    document.querySelectorAll('.drillable').forEach(function(trigger) {
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    });
+  });
+
+  it('clicking the "High-priority gaps" stat reveals the itemized questions, and clicking again hides it', () => {
+    primeReportState();
+    renderReport();
+    const trigger = document.querySelector('[data-drill="drill-panel-high"]');
+    const panel = document.getElementById('drill-panel-high');
+
+    trigger.click();
+    expect(panel.classList.contains('hidden')).toBe(false);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    // Every question was answered 0 above, so every quick-depth question's
+    // text should appear in the itemized list -- spot-check one.
+    expect(panel.textContent).toContain(state.questions[0].text);
+    expect(panel.textContent).toContain('Answered: ' + state.questions[0].options.find(o => o.v === 0).label);
+
+    trigger.click();
+    expect(panel.classList.contains('hidden')).toBe(true);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('the "Moderate gaps" panel shows the empty-state message when there are none', () => {
+    primeReportState(); // all answers are 0 -> every gap is high-priority, none medium
+    renderReport();
+    document.querySelector('[data-drill="drill-panel-medium"]').click();
+    expect(document.getElementById('drill-panel-medium').textContent).toContain('No answered questions here yet.');
+  });
+
+  it('a Governance Score Breakdown dimension bar drills into exactly the questions tagged with that dimension', () => {
+    primeReportState();
+    renderReport();
+    const dimensionId = state.questions.find(q => q.dimension).dimension;
+    const trigger = document.querySelector('[data-drill="drill-panel-dim-' + dimensionId + '"]');
+    trigger.click();
+    const panel = document.getElementById('drill-panel-dim-' + dimensionId);
+    const expectedQuestions = state.questions.filter(q => q.dimension === dimensionId);
+    expectedQuestions.forEach(q => expect(panel.textContent).toContain(q.text));
+  });
+
+  it('a NIST-function score bar (Governance Score Breakdown) and its Framework Coverage Mapping counterpart drill into the same underlying questions via two independent panels', () => {
+    primeReportState();
+    renderReport();
+    document.querySelector('[data-drill="drill-panel-scorefn-govern"]').click();
+    document.querySelector('[data-drill="drill-panel-covfn-govern"]').click();
+    const scorePanel = document.getElementById('drill-panel-scorefn-govern');
+    const covPanel = document.getElementById('drill-panel-covfn-govern');
+    expect(scorePanel.classList.contains('hidden')).toBe(false);
+    expect(covPanel.classList.contains('hidden')).toBe(false);
+    expect(scorePanel.textContent).toBe(covPanel.textContent);
+    // Toggling one panel must not affect the other -- they're independent DOM nodes.
+    document.querySelector('[data-drill="drill-panel-scorefn-govern"]').click();
+    expect(scorePanel.classList.contains('hidden')).toBe(true);
+    expect(covPanel.classList.contains('hidden')).toBe(false);
+  });
 });

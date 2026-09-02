@@ -183,6 +183,17 @@
   .bar span { display: block; height: 100%; background: var(--accent); width: 0; transition: width 0.4s; }
   .fn-desc { font-size: 11px; color: var(--text-muted); margin: 6px 0 0; }
 
+  /* B15: drill-down from a summary count/score into itemized reasoning */
+  .drillable { cursor: pointer; border: none; text-align: left; font: inherit; color: inherit; width: 100%; display: block; }
+  .drillable:hover { background: var(--accent-bg); }
+  .stat.drillable, .fn.drillable { transition: background 0.12s; }
+  .drill-hint { font-size: 10px; color: var(--accent-text); margin: 6px 0 0; }
+  .drill-panel { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-top: 8px; }
+  .drill-list { margin: 0; padding: 0; list-style: none; }
+  .drill-list li { padding: 6px 0; border-bottom: 0.5px solid var(--border); }
+  .drill-list li:last-child { border-bottom: none; }
+  .drill-q { font-size: 13px; margin: 0 0 2px; }
+
   /* Confidence (Likert) step and perception-vs-evidence report section */
   .likert-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
   .likert-fn-label { font-size: 11px; font-weight: 600; color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.03em; margin: 0 0 6px; }

@@ -33,7 +33,10 @@ import {
   buildReportExport,
   toCsv,
   recommendationsToCsv,
-  buildExecutiveSummary
+  buildExecutiveSummary,
+  explainGapsByPriority,
+  explainDimension,
+  explainFunctionScore
 } from '../src/logic.js';
 import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST, AGGREGATION_MIN_GROUP_SIZE, TOOL_ADOPTION_QUESTIONS } from '../src/data.js';
 
@@ -1989,5 +1992,85 @@ describe('buildExecutiveSummary (B14)', () => {
     expect(buildExecutiveSummary(recs, highExposure, lowPortfolio)).toMatch(/regulatory exposure is elevated/);
     expect(buildExecutiveSummary(recs, lowExposure, highPortfolio)).toMatch(/tool portfolio carries elevated risk/);
     expect(buildExecutiveSummary(recs, highExposure, highPortfolio)).toMatch(/regulatory exposure is elevated, and the declared tool portfolio carries elevated risk/);
+  });
+});
+
+// ============================================================================
+// B15: drill-down from summary gap counts/scores into itemized reasoning
+// ============================================================================
+
+describe('explainGapsByPriority (B15)', () => {
+  it('returns one entry per gap of the given priority, with the answer label attached', () => {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    const answers = {};
+    questions.forEach((q, i) => { answers[q.id] = i === 0 ? 0 : 3; }); // exactly one high-priority gap
+    const gaps = identifyGaps(questions, answers);
+
+    const high = explainGapsByPriority(gaps, 'high');
+    expect(high.length).toBe(1);
+    expect(high[0].id).toBe(questions[0].id);
+    expect(high[0].text).toBe(questions[0].text);
+    expect(high[0].v).toBe(0);
+    expect(high[0].label).toBe(questions[0].options.find(o => o.v === 0).label);
+
+    expect(explainGapsByPriority(gaps, 'medium')).toEqual([]);
+  });
+
+  it('returns an empty array when nothing matches the given priority', () => {
+    expect(explainGapsByPriority([], 'high')).toEqual([]);
+  });
+});
+
+describe('explainDimension (B15)', () => {
+  it('returns only answered questions tagged with the given dimension', () => {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    const dimensionId = questions[0].dimension;
+    const answers = {};
+    answers[questions[0].id] = 2;
+    // Leave every other question unanswered.
+
+    const rows = explainDimension(questions, answers, dimensionId);
+    expect(rows.length).toBe(1);
+    expect(rows[0].id).toBe(questions[0].id);
+    expect(rows[0].fn).toBe(questions[0].fn);
+    expect(rows[0].v).toBe(2);
+    expect(rows[0].label).toBe(questions[0].options.find(o => o.v === 2).label);
+  });
+
+  it('excludes questions tagged with the dimension but not answered', () => {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    const dimensionId = questions[0].dimension;
+    expect(explainDimension(questions, {}, dimensionId)).toEqual([]);
+  });
+
+  it('returns an empty array for a dimension id nothing in the pool carries', () => {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    const answers = {};
+    questions.forEach(q => { answers[q.id] = 1; });
+    expect(explainDimension(questions, answers, 'not-a-real-dimension')).toEqual([]);
+  });
+});
+
+describe('explainFunctionScore (B15)', () => {
+  it('returns only answered questions in the given NIST function, carrying their dimension along', () => {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    const governQuestion = questions.find(q => q.fn === 'govern');
+    const answers = {};
+    answers[governQuestion.id] = 1;
+
+    const rows = explainFunctionScore(questions, answers, 'govern');
+    expect(rows.length).toBe(1);
+    expect(rows[0].id).toBe(governQuestion.id);
+    expect(rows[0].dimension).toBe(governQuestion.dimension);
+    expect(rows[0].v).toBe(1);
+    expect(rows[0].label).toBe(governQuestion.options.find(o => o.v === 1).label);
+  });
+
+  it('excludes unanswered questions and questions from a different function', () => {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    const answers = {};
+    questions.filter(q => q.fn === 'map').forEach(q => { answers[q.id] = 2; });
+    const rows = explainFunctionScore(questions, answers, 'govern');
+    expect(rows).toEqual([]);
   });
 });
