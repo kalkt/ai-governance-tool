@@ -812,3 +812,144 @@ export function describeToolAdoptionOutcome(evaluation) {
   return { headline: headline, body: body };
 }
 
+// ============================================================================
+// B14: nine-section report rebuild (backlog SS1.4.8) -- these two functions
+// assemble already-computed report data into a clean, exportable shape (JSON)
+// and a flat tabular shape (CSV), rather than duplicating any scoring logic.
+// Nothing here changes what any existing function computes.
+// ============================================================================
+
+// Risk Register section (SS1.4.8's nine-section list; this project's first
+// build of it). SCOPING CALL, stated plainly rather than glossed over: a true
+// per-USE-CASE Tier 1-4 register (B6's classifyUseCaseRisk) needs the seven
+// risk-criteria answers B13's New AI Tool Adoption assessment collects one
+// tool at a time -- the Governance Readiness flow this report belongs to
+// never collects those for the org's whole tool inventory at once. Building
+// that for real would mean either running B13 per declared tool (a real
+// future feature, not this item's scope) or guessing at criteria answers
+// nobody gave -- neither is this item's call to make. This register is
+// therefore built at TOOL level instead, from the same classifyToolsInUse()
+// data the existing tool-review section already shows: each declared tool's
+// TOOL_MASTER_LIST classification, reasoning, sources, and last-reviewed
+// date, plus each undeclared/unclassified "other tool" as its own row. This
+// is real, sourced content -- not a placeholder -- just a different (coarser)
+// grain than the four-tier per-use-case model, and the report says so.
+export function buildRiskRegister(toolAnalysis) {
+  var rows = [];
+  ['high-risk', 'caution', 'lower-risk'].forEach(function(cls) {
+    toolAnalysis.flagged[cls].forEach(function(t) {
+      rows.push({
+        name: t.name,
+        classification: cls,
+        reasoning: t.reasoning,
+        sources: t.sources,
+        lastReviewed: t.lastReviewed
+      });
+    });
+  });
+  (toolAnalysis.otherTools || []).forEach(function(name) {
+    rows.push({ name: name, classification: 'unclassified', reasoning: 'Not in the reviewed tool list -- evaluate independently.', sources: [], lastReviewed: null });
+  });
+  return rows;
+}
+
+// Full structured export (JSON leg of SS1.4.8's "interactive HTML (primary)
+// + PDF + structured JSON/CSV export"). The PDF leg is deliberately NOT a new
+// dependency here -- the existing "Print or save as PDF" button (browser
+// print-to-PDF) already satisfies it without adding a rendering library,
+// consistent with this project's standalone/no-backend-by-default design
+// (SS1.4.2); revisiting that is a scope call for whoever picks up a real PDF
+// template, not decided here. `input` is the same set of already-computed
+// values renderReport() builds for on-screen display -- this function adds
+// no new computation, just assembles them into one clean, stable shape safe
+// to JSON.stringify and hand to a user.
+export function buildReportExport(input) {
+  return {
+    generatedAt: new Date().toISOString(),
+    methodology: 'NIST AI Risk Management Framework (Govern/Map/Measure/Manage). Governance Maturity is a weighted average of five sub-dimensions with an Ownership & Accountability gating rule -- see this project\'s own published methodology notes, not a NIST-defined score.',
+    assessment: {
+      scope: input.scope,
+      role: input.role,
+      depth: input.depth,
+      profile: input.profile
+    },
+    governanceMaturity: {
+      overall: input.scores.overall,
+      tier: input.tier.label,
+      dimensions: input.scores.dimensionPct,
+      nistFunctions: input.scores.fnScores
+    },
+    selfPerceptionVsEvidence: input.confidenceGap,
+    regulatoryExposure: input.regulatoryExposure,
+    toolPortfolioRisk: {
+      level: input.toolPortfolioRisk.level,
+      highRiskCount: input.toolPortfolioRisk.highRiskCount,
+      cautionCount: input.toolPortfolioRisk.cautionCount,
+      lowerRiskCount: input.toolPortfolioRisk.lowerRiskCount,
+      unclassifiedCount: input.toolPortfolioRisk.unclassifiedCount
+    },
+    frameworkCoverage: input.frameworkCoverage,
+    riskRegister: buildRiskRegister(input.toolAnalysis),
+    recommendations: input.recs.map(function(r) {
+      return { title: r.title, priority: r.priority, nistFunction: r.fn, module: r.module, body: r.body };
+    }),
+    disclaimer: 'Self-assessment for internal planning, not a compliance certification or legal advice. Tool classifications are point-in-time and criteria-based.'
+  };
+}
+
+// Generic RFC4180-ish CSV serializer -- no library dependency for a feature
+// this small. Quotes a field only when it contains a comma, quote, or
+// newline (quotes doubled per the standard); everything else is emitted
+// bare, matching what any spreadsheet app expects to read back correctly.
+export function toCsv(rows, columns) {
+  function escapeCell(v) {
+    var s = v === null || v === undefined ? '' : String(v);
+    if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  var lines = [columns.map(function(c) { return escapeCell(c.label); }).join(',')];
+  rows.forEach(function(row) {
+    lines.push(columns.map(function(c) { return escapeCell(c.get(row)); }).join(','));
+  });
+  return lines.join('\r\n');
+}
+
+// Recommendations table specifically, per this item's own decide-and-document
+// scoping choice: CSV serves the one dataset someone would actually want to
+// paste into a spreadsheet and work with row-by-row (a prioritized action
+// list); everything else (methodology, per-dimension scores, full risk
+// register) is already in the JSON export above, and forcing dissimilar
+// nested shapes into one flat CSV would produce something less useful than
+// either format done properly.
+export function recommendationsToCsv(recs) {
+  return toCsv(recs, [
+    { label: 'Priority', get: function(r) { return r.priority; } },
+    { label: 'NIST Function', get: function(r) { return r.fn; } },
+    { label: 'Module', get: function(r) { return r.module; } },
+    { label: 'Title', get: function(r) { return r.title; } },
+    { label: 'Body', get: function(r) { return r.body; } }
+  ]);
+}
+
+// Executive Summary narrative (SS1.4.8's nine-section list, section 1).
+// Decide-and-document authored copy (same discipline as B4/B7/B10/B13's own
+// authored copy) synthesizing already-computed values into one paragraph --
+// asserts nothing new, just names the single most urgent item so the report
+// doesn't open with a wall of numbers and no read on what matters most.
+export function buildExecutiveSummary(recs, regulatoryExposure, toolPortfolioRisk) {
+  var topRec = recs[0];
+  var headline = topRec ?
+    (topRec.priority === 'critical' ?
+      'The most urgent finding is structural: ' + topRec.title + '.' :
+      'The top-priority action is: ' + topRec.title + '.') :
+    'No critical or high-priority gaps were found at this assessment depth.';
+
+  var exposureNotes = [];
+  if (regulatoryExposure.level === 'high') exposureNotes.push('regulatory exposure is elevated');
+  if (toolPortfolioRisk.level === 'high') exposureNotes.push('the declared tool portfolio carries elevated risk');
+  var exposureLine = exposureNotes.length > 0 ?
+    ' Separately, ' + exposureNotes.join(', and ') + ' -- see those sections below.' : '';
+
+  return headline + exposureLine;
+}
+

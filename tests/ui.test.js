@@ -30,7 +30,8 @@ import {
   checkBtn,
   renderToolAdoptionContext,
   renderToolAdoptionQuestion,
-  renderToolAdoptionResult
+  renderToolAdoptionResult,
+  triggerDownload
 } from '../src/ui.js';
 import { getQuestionsForAssessment } from '../src/logic.js';
 import { TOOL_MASTER_LIST, TOOL_ADOPTION_QUESTIONS, ANNEX_III_DOMAINS } from '../src/data.js';
@@ -69,6 +70,17 @@ beforeEach(() => {
   // that has no scroll position to begin with.
   window.scrollTo = () => {};
   window.print = () => {};
+  // jsdom implements Blob but not URL.createObjectURL/revokeObjectURL (B14's
+  // export buttons) -- stub them the same way, since the object-URL value
+  // itself is never asserted on, only that triggering a download doesn't throw.
+  window.URL.createObjectURL = () => 'blob:mock';
+  window.URL.revokeObjectURL = () => {};
+  // jsdom logs "Not implemented: navigation to another Document" when a
+  // synthetic <a>'s .click() (triggerDownload, B14) fires -- it doesn't
+  // implement real navigation. Harmless noise, same category as the
+  // print/scrollTo stubs above; the only <a> this app ever creates is
+  // triggerDownload's own, so this is safe to stub globally.
+  HTMLAnchorElement.prototype.click = function() {};
 });
 
 describe('mountApp', () => {
@@ -732,7 +744,7 @@ describe('renderReport: remaining branches', () => {
     expect(document.getElementById('stage-report').innerHTML).toContain('Industry-specific overlays for Healthcare');
   });
 
-  it('renders the regulatory & portfolio context section end-to-end (B10)', () => {
+  it('renders the Regulatory Exposure Profile and AI Tool Portfolio Review sections end-to-end (B10/B14)', () => {
     primeReportState();
     state.profile.region = 'eu';
     state.profile.industry = 'healthcare';
@@ -740,14 +752,16 @@ describe('renderReport: remaining branches', () => {
     state.toolsSelected = ['t-chatgpt']; // caution-tier + sensitive data -> escalates to high
     renderReport();
     const html = document.getElementById('stage-report').innerHTML;
-    expect(html).toContain('Regulatory &amp; portfolio context');
+    expect(html).toContain('Regulatory Exposure Profile');
+    expect(html).toContain('AI Tool Portfolio Review');
     expect(html).toContain('EU AI Act (via the Digital Omnibus amendment)');
     expect(html).toContain('HIPAA governs protected health information');
     expect(html).toContain('Weighted up for declared sensitive data types');
     // Both level-based badges should read "High" given the fixture above.
-    const labels = Array.from(document.querySelectorAll('.b10-label')).map(function(el) { return el.textContent.trim(); });
-    expect(labels[0]).toContain('High');
-    expect(labels[1]).toContain('High');
+    const exposureLabel = Array.from(document.querySelectorAll('.b10-label')).find(function(el) { return el.textContent.indexOf('Exposure level') !== -1; });
+    const portfolioLabel = Array.from(document.querySelectorAll('.b10-label')).find(function(el) { return el.textContent.indexOf('Tool portfolio risk') !== -1; });
+    expect(exposureLabel.textContent).toContain('High');
+    expect(portfolioLabel.textContent).toContain('High');
   });
 
   it('shows an "Info" gap badge, not a High/Medium/Low one, for a region with no dedicated research', () => {
@@ -756,8 +770,8 @@ describe('renderReport: remaining branches', () => {
     renderReport();
     const html = document.getElementById('stage-report').innerHTML;
     expect(html).toContain('No dedicated regulatory research completed for this region yet');
-    const firstLabel = document.querySelectorAll('.b10-label')[0];
-    expect(firstLabel.querySelector('.tool-badge')).toBeNull(); // 'info' level renders no badge
+    const exposureLabel = Array.from(document.querySelectorAll('.b10-label')).find(function(el) { return el.textContent.indexOf('Exposure level') !== -1; });
+    expect(exposureLabel.querySelector('.tool-badge')).toBeNull(); // 'info' level renders no badge
   });
 
   it('shows "No jurisdiction..." placeholder text and a "Partial" framework-coverage pill when applicable', () => {
@@ -767,7 +781,7 @@ describe('renderReport: remaining branches', () => {
     renderReport();
     const html = document.getElementById('stage-report').innerHTML;
     expect(html).toContain('No jurisdiction, industry, or data-type factors currently on file');
-    expect(html).toContain('Framework coverage (by NIST function)');
+    expect(html).toContain('Framework Coverage Mapping');
   });
 
   it('flags an overconfident function when self-reported confidence outpaces evidence', () => {
@@ -968,5 +982,104 @@ describe('New AI Tool Adoption assessment (B13)', () => {
     document.getElementById('btn-restart-ta').click();
     expect(state.toolAdoption).toEqual({ annexIiiDomainIds: [], companySize: null, answers: {}, idx: 0 });
     expect(document.getElementById('stage-tool-adoption-context').classList.contains('hidden')).toBe(false);
+  });
+});
+
+describe('nine-section report rebuild (B14)', () => {
+  function primeReportState() {
+    state.scope = { id: 'org', name: '' };
+    state.role = { id: null, department: '' };
+    state.profile.orgType = 'for-profit';
+    state.profile.servesYouth = false;
+    state.depth = 'quick';
+    state.questions = getQuestionsForAssessment(state.profile, 'quick');
+    state.idx = 0;
+    state.answers = {};
+    state.questions.forEach(function(q) { state.answers[q.id] = 0; });
+    state.confidenceAnswers = {};
+  }
+
+  it('renders all nine numbered sections in order', () => {
+    primeReportState();
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    const expected = [
+      'Executive Summary', 'Assessment Overview', 'Governance Score Breakdown',
+      'Regulatory Exposure Profile', 'AI Tool Portfolio Review', 'Framework Coverage Mapping',
+      'Risk Register', 'Prioritized Recommendations', 'Roadmap'
+    ];
+    let lastIndex = -1;
+    expected.forEach(function(title, i) {
+      const idx = html.indexOf(title);
+      expect(idx, title + ' should render').toBeGreaterThan(-1);
+      expect(idx, title + ' should come after ' + expected[i - 1]).toBeGreaterThan(lastIndex);
+      lastIndex = idx;
+    });
+    for (let n = 1; n <= 9; n++) {
+      expect(html).toContain('Section ' + n + ' of 9');
+    }
+  });
+
+  it('the Executive Summary leads with the critical entry when Ownership & Accountability gates the score', () => {
+    primeReportState(); // all-zero answers -> Ownership & Accountability bottom tier -> critical entry
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('The most urgent finding is structural: Establish real ownership for AI governance, organization-wide.');
+  });
+
+  it('the Governance Score Breakdown renders one bar per GOVERNANCE_DIMENSIONS entry, with its weight', () => {
+    primeReportState();
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('Ownership &amp; Accountability');
+    expect(html).toContain('Weight: 20%');
+    expect(html).toContain('Weight: 25%');
+    expect(html).toContain('Weight: 15%');
+  });
+
+  it('shows the gating-rule callout only when Ownership & Accountability is actually gating the score', () => {
+    primeReportState(); // all zero -> gates
+    renderReport();
+    expect(document.getElementById('stage-report').innerHTML).toContain('caps your overall score regardless of the other four dimensions');
+
+    state.questions.forEach(function(q) { state.answers[q.id] = 3; }); // everything maxed -> no gating
+    renderReport();
+    expect(document.getElementById('stage-report').innerHTML).not.toContain('caps your overall score regardless of the other four dimensions');
+  });
+
+  it('the Risk Register lists one row per declared tool, and an unclassified row for "other" tools', () => {
+    primeReportState();
+    state.toolsSelected = ['t-grok'];
+    state.otherTools = ['Some Internal Tool'];
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    const rows = document.querySelectorAll('.register-table tbody tr');
+    expect(rows.length).toBe(2);
+    expect(html).toContain('Some Internal Tool');
+    expect(html).toContain('Unclassified');
+  });
+
+  it('the Risk Register shows an empty-state message when no tools are declared', () => {
+    primeReportState();
+    renderReport();
+    expect(document.getElementById('stage-report').innerHTML).toContain('No tools declared -- nothing to register yet.');
+  });
+
+  it('Export JSON triggers a download without throwing', () => {
+    primeReportState();
+    renderReport();
+    expect(() => document.getElementById('btn-export-json').click()).not.toThrow();
+  });
+
+  it('Export CSV triggers a download without throwing', () => {
+    primeReportState();
+    renderReport();
+    expect(() => document.getElementById('btn-export-csv').click()).not.toThrow();
+  });
+
+  it('triggerDownload creates and cleans up an anchor element without throwing', () => {
+    const before = document.body.children.length;
+    expect(() => triggerDownload('test.json', '{"a":1}', 'application/json')).not.toThrow();
+    expect(document.body.children.length).toBe(before); // the synthetic <a> is removed after click
   });
 });

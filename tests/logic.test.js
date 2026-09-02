@@ -28,7 +28,12 @@ import {
   getVisibilityTagsForRole,
   meetsAggregationThreshold,
   evaluateToolAdoption,
-  describeToolAdoptionOutcome
+  describeToolAdoptionOutcome,
+  buildRiskRegister,
+  buildReportExport,
+  toCsv,
+  recommendationsToCsv,
+  buildExecutiveSummary
 } from '../src/logic.js';
 import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST, AGGREGATION_MIN_GROUP_SIZE, TOOL_ADOPTION_QUESTIONS } from '../src/data.js';
 
@@ -1830,5 +1835,159 @@ describe('describeToolAdoptionOutcome (B13)', () => {
     expect(evaluation.oversight).toBeNull();
     const outcome = describeToolAdoptionOutcome(evaluation);
     expect(outcome.body).toMatch(/honest gap/);
+  });
+});
+
+// ============================================================================
+// B14: nine-section report rebuild -- Risk Register, structured JSON export,
+// CSV export (backlog SS1.4.8)
+// ============================================================================
+
+describe('buildRiskRegister (B14)', () => {
+  it('produces one row per classified tool plus one row per unclassified "other" tool', () => {
+    const toolAnalysis = classifyToolsInUse(['t-grok'], ['Some Internal Tool']);
+    const register = buildRiskRegister(toolAnalysis);
+    expect(register.length).toBe(2);
+
+    const grokTool = TOOL_MASTER_LIST.find(t => t.id === 't-grok');
+    const grokRow = register.find(r => r.name === grokTool.name);
+    expect(grokRow.classification).toBe(grokTool.classification);
+    expect(grokRow.reasoning).toBe(grokTool.reasoning);
+    expect(grokRow.sources).toEqual(grokTool.sources);
+    expect(grokRow.lastReviewed).toBe(grokTool.lastReviewed);
+
+    const otherRow = register.find(r => r.name === 'Some Internal Tool');
+    expect(otherRow.classification).toBe('unclassified');
+    expect(otherRow.sources).toEqual([]);
+  });
+
+  it('returns an empty array for an empty inventory', () => {
+    expect(buildRiskRegister(classifyToolsInUse([], []))).toEqual([]);
+  });
+});
+
+describe('buildReportExport (B14)', () => {
+  function sampleInput() {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    const answers = {};
+    questions.forEach((q, i) => { answers[q.id] = i % 4 > 3 ? 3 : i % 4; });
+    const scores = computeScores(questions, answers);
+    const tier = computeTier(scores.overall);
+    const gaps = identifyGaps(questions, answers);
+    const criticalGaps = identifyCriticalGaps(scores);
+    const recs = criticalGaps.concat(buildRecommendations(gaps)).slice(0, 8);
+    const toolAnalysis = classifyToolsInUse(['t-grok'], []);
+    const profile = { orgType: 'for-profit', servesYouth: false, industry: 'technology', size: '11-50', region: 'us', regulated: [], customerType: 'b2b', aiMaturity: 'piloting' };
+    return {
+      profile, scope: { id: 'org', name: '' }, role: { id: 'leadership', department: '' }, depth: 'quick',
+      scores, tier, recs, toolAnalysis,
+      regulatoryExposure: computeRegulatoryExposure(profile),
+      toolPortfolioRisk: computeToolPortfolioRisk(['t-grok'], [], profile),
+      frameworkCoverage: computeFrameworkCoverage(scores),
+      confidenceGap: computeConfidenceGap(scores, {})
+    };
+  }
+
+  it('assembles a stable, JSON-serializable shape from already-computed pieces, without recomputing them', () => {
+    const input = sampleInput();
+    const report = buildReportExport(input);
+    expect(() => JSON.stringify(report)).not.toThrow();
+    expect(report.governanceMaturity.overall).toBe(input.scores.overall);
+    expect(report.governanceMaturity.tier).toBe(input.tier.label);
+    expect(report.governanceMaturity.dimensions).toEqual(input.scores.dimensionPct);
+    expect(report.regulatoryExposure).toEqual(input.regulatoryExposure);
+    expect(report.toolPortfolioRisk.level).toBe(input.toolPortfolioRisk.level);
+    expect(report.frameworkCoverage).toEqual(input.frameworkCoverage);
+    expect(report.riskRegister).toEqual(buildRiskRegister(input.toolAnalysis));
+    expect(report.recommendations.length).toBe(input.recs.length);
+    expect(typeof report.generatedAt).toBe('string');
+    expect(typeof report.methodology).toBe('string');
+    expect(typeof report.disclaimer).toBe('string');
+  });
+
+  it('recommendations are flattened to just the report-relevant fields', () => {
+    const input = sampleInput();
+    const report = buildReportExport(input);
+    expect(report.recommendations.length).toBeGreaterThan(0);
+    report.recommendations.forEach(r => {
+      expect(Object.keys(r).sort()).toEqual(['body', 'module', 'nistFunction', 'priority', 'title'].sort());
+    });
+  });
+});
+
+describe('toCsv (B14)', () => {
+  it('renders a header row plus one row per data row', () => {
+    const csv = toCsv([{ a: 1, b: 'x' }, { a: 2, b: 'y' }], [
+      { label: 'A', get: r => r.a },
+      { label: 'B', get: r => r.b }
+    ]);
+    expect(csv).toBe('A,B\r\n1,x\r\n2,y');
+  });
+
+  it('quotes and escapes fields containing commas, quotes, or newlines', () => {
+    const csv = toCsv([{ a: 'has, comma', b: 'has "quote"', c: 'has\nnewline' }], [
+      { label: 'A', get: r => r.a },
+      { label: 'B', get: r => r.b },
+      { label: 'C', get: r => r.c }
+    ]);
+    expect(csv).toBe('A,B,C\r\n"has, comma","has ""quote""","has\nnewline"');
+  });
+
+  it('renders null/undefined cells as an empty string', () => {
+    const csv = toCsv([{ a: null, b: undefined }], [
+      { label: 'A', get: r => r.a },
+      { label: 'B', get: r => r.b }
+    ]);
+    expect(csv).toBe('A,B\r\n,');
+  });
+
+  it('renders just the header row for an empty dataset', () => {
+    expect(toCsv([], [{ label: 'A', get: r => r.a }])).toBe('A');
+  });
+});
+
+describe('recommendationsToCsv (B14)', () => {
+  it('has one column per recommendation field, in a stable order', () => {
+    const recs = [{ priority: 'high', fn: 'govern', module: 'base', title: 'Title one', body: 'Body one, with a comma' }];
+    const csv = recommendationsToCsv(recs);
+    const lines = csv.split('\r\n');
+    expect(lines[0]).toBe('Priority,NIST Function,Module,Title,Body');
+    expect(lines[1]).toBe('high,govern,base,Title one,"Body one, with a comma"');
+  });
+
+  it('produces just a header row for an empty recommendations list', () => {
+    expect(recommendationsToCsv([])).toBe('Priority,NIST Function,Module,Title,Body');
+  });
+});
+
+describe('buildExecutiveSummary (B14)', () => {
+  const lowExposure = { level: 'low', factors: [], aiMaturity: null };
+  const lowPortfolio = { level: 'low', highRiskCount: 0, cautionCount: 0, lowerRiskCount: 0, unclassifiedCount: 0 };
+
+  it('leads with the critical entry when one exists', () => {
+    const recs = [{ priority: 'critical', title: 'Establish real ownership for AI governance, organization-wide' }];
+    const summary = buildExecutiveSummary(recs, lowExposure, lowPortfolio);
+    expect(summary).toMatch(/^The most urgent finding is structural: Establish real ownership/);
+  });
+
+  it('leads with the top recommendation when no critical entry exists', () => {
+    const recs = [{ priority: 'high', title: 'Do the thing' }];
+    const summary = buildExecutiveSummary(recs, lowExposure, lowPortfolio);
+    expect(summary).toMatch(/^The top-priority action is: Do the thing\./);
+  });
+
+  it('states no gaps found when the recommendations list is empty', () => {
+    expect(buildExecutiveSummary([], lowExposure, lowPortfolio)).toBe('No critical or high-priority gaps were found at this assessment depth.');
+  });
+
+  it('appends an elevated-exposure note only when regulatory exposure or tool portfolio risk is high', () => {
+    const recs = [{ priority: 'high', title: 'Do the thing' }];
+    const highExposure = { level: 'high', factors: [], aiMaturity: null };
+    const highPortfolio = { level: 'high', highRiskCount: 1, cautionCount: 0, lowerRiskCount: 0, unclassifiedCount: 0 };
+
+    expect(buildExecutiveSummary(recs, lowExposure, lowPortfolio)).not.toMatch(/Separately/);
+    expect(buildExecutiveSummary(recs, highExposure, lowPortfolio)).toMatch(/regulatory exposure is elevated/);
+    expect(buildExecutiveSummary(recs, lowExposure, highPortfolio)).toMatch(/tool portfolio carries elevated risk/);
+    expect(buildExecutiveSummary(recs, highExposure, highPortfolio)).toMatch(/regulatory exposure is elevated, and the declared tool portfolio carries elevated risk/);
   });
 });

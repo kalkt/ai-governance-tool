@@ -28,7 +28,8 @@ import {
   SCOPE_OPTIONS,
   ROLE_OPTIONS,
   ANNEX_III_DOMAINS,
-  TOOL_ADOPTION_QUESTIONS
+  TOOL_ADOPTION_QUESTIONS,
+  GOVERNANCE_DIMENSIONS
 } from './data.js';
 import {
   getApplicableModules,
@@ -50,6 +51,11 @@ import {
   computeRegulatoryExposure,
   computeToolPortfolioRisk,
   computeFrameworkCoverage,
+  buildRiskRegister,
+  buildReportExport,
+  recommendationsToCsv,
+  buildExecutiveSummary,
+  GOVERNANCE_GATING_THRESHOLD,
   evaluateToolAdoption,
   describeToolAdoptionOutcome
 } from './logic.js';
@@ -930,6 +936,13 @@ export function renderConfidence() {
   });
 }
 
+// B14: nine-section report architecture (backlog SS1.4.8, research foundation
+// SS11.1). A small local helper rather than a data.js export -- this is
+// purely a rendering convenience (numbering + heading markup), not content.
+function sectionHeading(n, title) {
+  return '<p class="kicker">Section ' + n + ' of 9</p><h2>' + title + '</h2>';
+}
+
 export function renderReport() {
   show('stage-report');
   renderStepper('report');
@@ -950,17 +963,14 @@ export function renderReport() {
   var modules = getApplicableModules(state.profile);
   var confidenceGap = computeConfidenceGap(scores, state.confidenceAnswers);
 
-  // B10: three dimensions reported separately, never averaged into scores.overall
-  // above. No dedicated report section exists yet (B14 rebuilds the report
-  // properly) -- this is a deliberately lightweight surfacing so the new
-  // functions are exercised and visible today, reusing existing CSS
-  // (tool-badge high/caution/low for the two level-based dimensions,
-  // tier-pill tier-low/tier-med/tier-high for the compliant/partial/missing
-  // per-function pills) rather than adding new styling for a section B14 will
-  // likely redesign anyway.
+  // B10's three separately-reported dimensions -- never averaged into
+  // scores.overall above. Each now gets its own numbered section below
+  // (Regulatory Exposure Profile / AI Tool Portfolio Review / Framework
+  // Coverage Mapping) instead of B10's original single combined preview.
   var regulatoryExposure = computeRegulatoryExposure(state.profile);
   var toolPortfolioRisk = computeToolPortfolioRisk(state.toolsSelected, state.otherTools, state.profile);
   var frameworkCoverage = computeFrameworkCoverage(scores);
+  var riskRegister = buildRiskRegister(toolAnalysis);
 
   var highCount = gaps.filter(function(g) { return g.priority === 'high'; }).length;
   var medCount = gaps.filter(function(g) { return g.priority === 'medium'; }).length;
@@ -973,87 +983,99 @@ export function renderReport() {
   var industryLabel = state.profile.industry ? INDUSTRIES.find(function(i) { return i.id === state.profile.industry; }).label : '';
   var scopeText = buildScopeText(state.profile, modules);
 
+  var levelBadgeCls = function(level) { return level === 'high' ? 'high' : (level === 'medium' ? 'caution' : (level === 'low' ? 'low' : '')); };
+  var levelBadgeLabel = function(level) { return level === 'high' ? 'High' : (level === 'medium' ? 'Medium' : (level === 'low' ? 'Low' : 'Info')); };
+  var coverageTierCls = function(status) { return status === 'compliant' ? 'tier-low' : (status === 'partial' ? 'tier-med' : 'tier-high'); };
+  var coverageLabel = function(status) { return status === 'compliant' ? 'Compliant' : (status === 'partial' ? 'Partial' : 'Missing'); };
+  var registerBadgeCls = function(cls) { return cls === 'high-risk' ? 'high' : (cls === 'caution' ? 'caution' : (cls === 'lower-risk' ? 'low' : '')); };
+  var registerBadgeLabel = function(cls) { return cls === 'high-risk' ? 'High risk' : (cls === 'caution' ? 'Caution' : (cls === 'lower-risk' ? 'Lower risk' : 'Unclassified')); };
+
   var html = '' +
     '<div class="hero"><p class="kicker">Your report</p><h1>AI governance readiness</h1>' +
     '<p class="lede">Based on the NIST AI Risk Management Framework' + (industryLabel ? ', tailored for ' + industryLabel : '') + '.</p></div>';
 
+  // ---- 1. Executive Summary ----
+  html += '<div class="section">' + sectionHeading(1, 'Executive Summary') +
+    '<div class="stat-grid">' +
+      '<div class="stat"><p class="stat-label">Overall readiness</p><p class="stat-value">' + scores.overall + '%</p></div>' +
+      '<div class="stat"><p class="stat-label">Risk tier</p><p class="stat-value small"><span class="tier-pill ' + tier.cssClass + '">' + tier.label + '</span></p></div>' +
+      '<div class="stat"><p class="stat-label">Critical gaps</p><p class="stat-value">' + highCount + '</p></div>' +
+      '<div class="stat"><p class="stat-label">Moderate gaps</p><p class="stat-value">' + medCount + '</p></div>' +
+    '</div>' +
+    '<div class="callout">' + tier.desc + '</div>' +
+    '<p class="lede" style="margin-top:10px;">' + buildExecutiveSummary(recs, regulatoryExposure, toolPortfolioRisk) + '</p>' +
+  '</div>';
+
+  // ---- 2. Assessment Overview ----
   var scopeDeclaration = describeScope(state.scope);
   var scopeDeclarationNote = state.scope.id === 'department'
     ? ' Findings and recommendations below are scoped to this department; org-wide governance may exist above it and is not assessed here.'
     : state.scope.id === 'initiative'
     ? ' Findings and recommendations below are scoped to this one system, framed as a pre-deployment review rather than an organization-wide assessment.'
     : '';
-  html += '<div class="scope-banner"><strong>Assessment scope:</strong> ' + scopeDeclaration + '.' + scopeDeclarationNote + '</div>';
-
   var roleDeclaration = describeRole(state.role);
-  if (roleDeclaration) {
-    html += '<div class="scope-banner"><strong>Answered by:</strong> ' + roleDeclaration + '.</div>';
-  }
 
-  if (scopeText) {
-    html += '<div class="scope-banner"><strong>What\'s in this report:</strong> ' + scopeText + '</div>';
-  }
-
-  html += '<div class="stat-grid">' +
-    '<div class="stat"><p class="stat-label">Overall readiness</p><p class="stat-value">' + scores.overall + '%</p></div>' +
-    '<div class="stat"><p class="stat-label">Risk tier</p><p class="stat-value small"><span class="tier-pill ' + tier.cssClass + '">' + tier.label + '</span></p></div>' +
-    '<div class="stat"><p class="stat-label">Critical gaps</p><p class="stat-value">' + highCount + '</p></div>' +
-    '<div class="stat"><p class="stat-label">Moderate gaps</p><p class="stat-value">' + medCount + '</p></div>' +
+  html += '<div class="section">' + sectionHeading(2, 'Assessment Overview') +
+    '<div class="scope-banner"><strong>Assessment scope:</strong> ' + scopeDeclaration + '.' + scopeDeclarationNote + '</div>' +
+    (roleDeclaration ? '<div class="scope-banner"><strong>Answered by:</strong> ' + roleDeclaration + '.</div>' : '') +
+    (scopeText ? '<div class="scope-banner"><strong>What\'s in this report:</strong> ' + scopeText + '</div>' : '') +
+    '<p class="qmeta" style="margin-top:10px;">Confidence: ' + confidenceNote + ' Generated ' + new Date().toLocaleDateString() + '.</p>' +
   '</div>';
 
-  html += '<div class="callout">' + tier.desc + '</div>';
-
-  // Tool review section (new in v2)
-  if (state.toolsSelected.length > 0 || state.otherTools.length > 0) {
-    html += '<div class="section"><h2>AI tools currently in use</h2>' + renderToolReview(toolAnalysis) + '</div>';
-  }
-
-  // Gap map
-  html += '<div class="section"><h2>Gap map across NIST functions</h2><div class="fn-grid">' +
-    Object.keys(FRAMEWORK.functions).map(function(k) {
-      var s = scores.fnScores[k];
-      var pct = s.max === 0 ? 0 : Math.round((s.sum / s.max) * 100);
-      return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3><span class="fn-score">' + pct + '%</span></div>' +
-        '<div class="bar"><span style="width:' + pct + '%"></span></div>' +
-        '<p class="fn-desc">' + FRAMEWORK.functions[k].desc + '</p></div>';
-    }).join('') + '</div></div>';
-
-  // Self-perception vs. evidence (parallel confidence layer, kept separate from the evidence-based score above)
+  // ---- 3. Governance Score Breakdown ----
+  var gatingActive = scores.dimensionPct['ownership-accountability'] !== null && scores.dimensionPct['ownership-accountability'] < GOVERNANCE_GATING_THRESHOLD;
   var overconfidentFns = Object.keys(confidenceGap).filter(function(k) { return confidenceGap[k].status === 'overconfident'; });
-  html += '<div class="section"><h2>Self-perception vs. evidence</h2>' +
+
+  html += '<div class="section">' + sectionHeading(3, 'Governance Score Breakdown') +
+    '<p class="qmeta" style="margin-bottom:12px;">Overall readiness (above) is a weighted average of these five dimensions, not a flat average of every question -- see backlog SS1.4.5 for the weighting rationale.</p>' +
+    '<div class="fn-grid">' +
+      GOVERNANCE_DIMENSIONS.map(function(d) {
+        var pct = scores.dimensionPct[d.id];
+        return '<div class="fn"><div class="fn-top"><h3>' + d.label + '</h3><span class="fn-score">' + (pct !== null ? pct + '%' : '—') + '</span></div>' +
+          '<div class="bar"><span style="width:' + (pct || 0) + '%"></span></div>' +
+          '<p class="fn-desc">Weight: ' + d.weight + '%</p></div>';
+      }).join('') +
+    '</div>' +
+    (gatingActive ? '<div class="callout warning" style="margin-top:10px;">Ownership &amp; Accountability scored in the bottom tier, which caps your overall score regardless of the other four dimensions -- see the Executive Summary above.</div>' : '') +
+
+    '<p class="b10-label" style="margin:16px 0 8px;">By NIST function</p>' +
+    '<div class="fn-grid">' +
+      Object.keys(FRAMEWORK.functions).map(function(k) {
+        var s = scores.fnScores[k];
+        var pct = s.max === 0 ? 0 : Math.round((s.sum / s.max) * 100);
+        return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3><span class="fn-score">' + pct + '%</span></div>' +
+          '<div class="bar"><span style="width:' + pct + '%"></span></div>' +
+          '<p class="fn-desc">' + FRAMEWORK.functions[k].desc + '</p></div>';
+      }).join('') +
+    '</div>' +
+
+    '<p class="b10-label" style="margin:16px 0 8px;">Self-perception vs. evidence</p>' +
     '<p class="qmeta" style="margin-bottom:12px;">The evidence score above reflects what you documented. This asks how prepared you said you FEEL, collected separately so it can not just echo the evidence answers back. A large gap in either direction is itself a finding.</p>' +
     (overconfidentFns.length > 0 ?
       '<div class="callout warning"><strong>Confidence outpaces evidence in ' + overconfidentFns.map(function(k) { return FRAMEWORK.functions[k].name; }).join(' and ') + '.</strong> Your team feels more prepared here than the evidence supports — often the riskiest kind of gap, since it rarely draws attention on its own.</div>' : '') +
     '<div class="fn-grid">' +
-    Object.keys(FRAMEWORK.functions).map(function(k) {
-      var g = confidenceGap[k];
-      var badgeLabel = g.status === 'overconfident' ? 'Feels more ready than evidence shows' :
-                        g.status === 'underconfident' ? 'Evidence stronger than it feels' :
-                        g.status === 'aligned' ? 'Perception matches evidence' : 'Not enough data';
-      return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
-        (g.status !== 'unknown' ? '<span class="gap-badge ' + g.status + '">' + badgeLabel + '</span>' : '') + '</div>' +
-        '<div class="fn-compare-row"><span class="fn-compare-label">Evidence</span><div class="bar"><span style="width:' + (g.evidencePct || 0) + '%"></span></div><span>' + (g.evidencePct !== null ? g.evidencePct + '%' : '—') + '</span></div>' +
-        '<div class="fn-compare-row"><span class="fn-compare-label">Confidence</span><div class="bar confidence"><span style="width:' + (g.confidencePct || 0) + '%"></span></div><span>' + (g.confidencePct !== null ? g.confidencePct + '%' : '—') + '</span></div>' +
-        '</div>';
-    }).join('') + '</div></div>';
+      Object.keys(FRAMEWORK.functions).map(function(k) {
+        var g = confidenceGap[k];
+        var badgeLabel = g.status === 'overconfident' ? 'Feels more ready than evidence shows' :
+                          g.status === 'underconfident' ? 'Evidence stronger than it feels' :
+                          g.status === 'aligned' ? 'Perception matches evidence' : 'Not enough data';
+        return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
+          (g.status !== 'unknown' ? '<span class="gap-badge ' + g.status + '">' + badgeLabel + '</span>' : '') + '</div>' +
+          '<div class="fn-compare-row"><span class="fn-compare-label">Evidence</span><div class="bar"><span style="width:' + (g.evidencePct || 0) + '%"></span></div><span>' + (g.evidencePct !== null ? g.evidencePct + '%' : '—') + '</span></div>' +
+          '<div class="fn-compare-row"><span class="fn-compare-label">Confidence</span><div class="bar confidence"><span style="width:' + (g.confidencePct || 0) + '%"></span></div><span>' + (g.confidencePct !== null ? g.confidencePct + '%' : '—') + '</span></div>' +
+          '</div>';
+      }).join('') +
+    '</div>' +
+  '</div>';
 
-  // B10: Regulatory Exposure, Tool Portfolio Risk, Framework Coverage --
-  // reported separately, never folded into the readiness score above. A
-  // lightweight preview ahead of B14's proper report rebuild (see the
-  // comment where these are computed, above).
-  var levelBadgeCls = function(level) { return level === 'high' ? 'high' : (level === 'medium' ? 'caution' : (level === 'low' ? 'low' : '')); };
-  var levelBadgeLabel = function(level) { return level === 'high' ? 'High' : (level === 'medium' ? 'Medium' : (level === 'low' ? 'Low' : 'Info')); };
-  var coverageTierCls = function(status) { return status === 'compliant' ? 'tier-low' : (status === 'partial' ? 'tier-med' : 'tier-high'); };
-  var coverageLabel = function(status) { return status === 'compliant' ? 'Compliant' : (status === 'partial' ? 'Partial' : 'Missing'); };
-
-  html += '<div class="section"><h2>Regulatory &amp; portfolio context</h2>' +
-    '<p class="qmeta" style="margin-bottom:12px;">Reported separately from the readiness score above -- these describe exposure and coverage, not governance maturity, and are never averaged into it.</p>' +
-
-    '<p class="b10-label" style="margin-bottom:6px;">Regulatory exposure ' +
+  // ---- 4. Regulatory Exposure Profile ----
+  html += '<div class="section">' + sectionHeading(4, 'Regulatory Exposure Profile') +
+    '<p class="qmeta" style="margin-bottom:12px;">Reported separately from the readiness score above -- exposure describes what regulation may apply, not how mature your governance is, and is never averaged into it.</p>' +
+    '<p class="b10-label" style="margin-bottom:6px;">Exposure level ' +
       (regulatoryExposure.level !== 'info' ? '<span class="tool-badge ' + levelBadgeCls(regulatoryExposure.level) + '">' + levelBadgeLabel(regulatoryExposure.level) + '</span>' : '') +
     '</p>' +
     (regulatoryExposure.factors.length === 0 ? '<p class="qmeta">No jurisdiction, industry, or data-type factors currently on file.</p>' :
-      '<ul class="phase ul" style="margin:0 0 12px; padding-left:18px; font-size:13px; color:var(--text-secondary);">' +
+      '<ul class="phase ul" style="margin:0; padding-left:18px; font-size:13px; color:var(--text-secondary);">' +
         // Show label + detail together -- label alone is often too generic
         // ("Industry-specific regulation") to carry the actual citation, and
         // detail alone drops the short heading. Skip the redundant repeat
@@ -1062,22 +1084,44 @@ export function renderReport() {
           return '<li>' + (f.label === f.detail ? f.detail : '<strong>' + f.label + ':</strong> ' + f.detail) + '</li>';
         }).join('') +
       '</ul>') +
-
-    '<p class="b10-label" style="margin-bottom:6px;">Tool portfolio risk <span class="tool-badge ' + levelBadgeCls(toolPortfolioRisk.level) + '">' + levelBadgeLabel(toolPortfolioRisk.level) + '</span></p>' +
-    '<p class="qmeta" style="margin-bottom:12px;">' + toolPortfolioRisk.highRiskCount + ' high-risk, ' + toolPortfolioRisk.cautionCount + ' caution, ' + toolPortfolioRisk.lowerRiskCount + ' lower-risk, ' + toolPortfolioRisk.unclassifiedCount + ' unclassified.' + (toolPortfolioRisk.dataSensitive ? ' Weighted up for declared sensitive data types.' : '') + '</p>' +
-
-    '<p class="b10-label" style="margin-bottom:6px;">Framework coverage (by NIST function)</p>' +
-    '<div class="fn-grid">' +
-    Object.keys(FRAMEWORK.functions).map(function(k) {
-      var c = frameworkCoverage[k];
-      return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
-        '<span class="tier-pill ' + coverageTierCls(c.status) + '">' + coverageLabel(c.status) + '</span></div>' +
-        '<p class="fn-desc">' + (c.pct !== null ? c.pct + '%' : 'No data') + '</p></div>';
-    }).join('') + '</div>' +
   '</div>';
 
-  // Recommendations
-  html += '<div class="section"><h2>Prioritized recommendations</h2>' +
+  // ---- 5. AI Tool Portfolio Review ----
+  html += '<div class="section">' + sectionHeading(5, 'AI Tool Portfolio Review') +
+    '<p class="b10-label" style="margin-bottom:6px;">Tool portfolio risk <span class="tool-badge ' + levelBadgeCls(toolPortfolioRisk.level) + '">' + levelBadgeLabel(toolPortfolioRisk.level) + '</span></p>' +
+    '<p class="qmeta" style="margin-bottom:12px;">' + toolPortfolioRisk.highRiskCount + ' high-risk, ' + toolPortfolioRisk.cautionCount + ' caution, ' + toolPortfolioRisk.lowerRiskCount + ' lower-risk, ' + toolPortfolioRisk.unclassifiedCount + ' unclassified.' + (toolPortfolioRisk.dataSensitive ? ' Weighted up for declared sensitive data types.' : '') + '</p>' +
+    (state.toolsSelected.length > 0 || state.otherTools.length > 0 ? renderToolReview(toolAnalysis) : '<p class="empty-tools">No tools declared.</p>') +
+  '</div>';
+
+  // ---- 6. Framework Coverage Mapping ----
+  html += '<div class="section">' + sectionHeading(6, 'Framework Coverage Mapping') +
+    '<p class="qmeta" style="margin-bottom:12px;">Percentage alignment against NIST AI RMF, by function. Built at function-level granularity, not the full 72-subcategory breakdown -- see backlog SS1.4.5/B10 for that scoping note.</p>' +
+    '<div class="fn-grid">' +
+      Object.keys(FRAMEWORK.functions).map(function(k) {
+        var c = frameworkCoverage[k];
+        return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
+          '<span class="tier-pill ' + coverageTierCls(c.status) + '">' + coverageLabel(c.status) + '</span></div>' +
+          '<p class="fn-desc">' + (c.pct !== null ? c.pct + '%' : 'No data') + '</p></div>';
+      }).join('') +
+    '</div>' +
+  '</div>';
+
+  // ---- 7. Risk Register ----
+  html += '<div class="section">' + sectionHeading(7, 'Risk Register') +
+    '<p class="qmeta" style="margin-bottom:12px;">Tool-level, not per-use-case: a full Tier 1-4 register (as built for the New AI Tool Adoption assessment) needs criteria this readiness assessment does not collect for your whole inventory at once. This lists each declared tool\'s documented risk classification instead.</p>' +
+    (riskRegister.length === 0 ? '<p class="empty-tools">No tools declared -- nothing to register yet.</p>' :
+      '<div style="overflow-x:auto;"><table class="register-table"><thead><tr><th>Tool</th><th>Classification</th><th>Reasoning</th><th>Last reviewed</th></tr></thead><tbody>' +
+        riskRegister.map(function(row) {
+          return '<tr><td>' + escapeHtml(row.name) + '</td>' +
+            '<td>' + (registerBadgeCls(row.classification) ? '<span class="tool-badge ' + registerBadgeCls(row.classification) + '">' + registerBadgeLabel(row.classification) + '</span>' : registerBadgeLabel(row.classification)) + '</td>' +
+            '<td>' + escapeHtml(row.reasoning) + '</td>' +
+            '<td>' + (row.lastReviewed ? escapeHtml(row.lastReviewed) : '—') + '</td></tr>';
+        }).join('') +
+      '</tbody></table></div>') +
+  '</div>';
+
+  // ---- 8. Prioritized Recommendations ----
+  html += '<div class="section">' + sectionHeading(8, 'Prioritized Recommendations') +
     (recs.length === 0 ? '<div class="callout">You have strong foundations. Lock in a quarterly review to keep governance current.</div>' :
     recs.map(function(r) {
       var cls = r.priority === 'critical' ? 'prio-critical' : (r.priority === 'high' ? 'prio-high' : (r.priority === 'medium' ? 'prio-med' : 'prio-low'));
@@ -1087,15 +1131,17 @@ export function renderReport() {
         '<span class="' + cls + '">' + plabel + '</span></div>' +
         '<p class="rec-meta">' + FRAMEWORK.functions[r.fn].name + ' function' + moduleTag + '</p>' +
         '<p class="rec-body">' + r.body + '</p></div>';
-    }).join('')) + '</div>';
+    }).join('')) +
+  '</div>';
 
-  // Roadmap. "Close critical gaps" (Next 90 days) includes both the new B7
-  // critical-priority entry and question-level high-priority gaps -- recs is
-  // already critical-first (see above), so slice(0,3) naturally keeps a
-  // critical entry in this phase rather than getting displaced by highs.
+  // ---- 9. Roadmap ----
+  // "Close critical gaps" (Next 90 days) includes both the B7 critical-
+  // priority entry and question-level high-priority gaps -- recs is already
+  // critical-first (see above), so slice(0,3) naturally keeps a critical
+  // entry in this phase rather than getting displaced by highs.
   var high = recs.filter(function(r) { return r.priority === 'critical' || r.priority === 'high'; }).slice(0, 3);
   var med = recs.filter(function(r) { return r.priority === 'medium'; }).slice(0, 3);
-  html += '<div class="section"><h2>Maturity roadmap</h2><div class="roadmap">' +
+  html += '<div class="section">' + sectionHeading(9, 'Roadmap') + '<div class="roadmap">' +
     '<div class="phase"><p class="plabel">Next 90 days</p><h4>Close critical gaps</h4><ul>' +
       (high.length ? high.map(function(r) { return '<li>' + r.title + '</li>'; }).join('') : '<li>No critical gaps.</li>') +
     '</ul></div>' +
@@ -1109,6 +1155,8 @@ export function renderReport() {
   html += '<div class="row" style="margin-top: 1.5rem;">' +
     '<button id="btn-restart">Start over</button>' +
     '<div style="flex:1"></div>' +
+    '<button id="btn-export-json">Export JSON</button>' +
+    '<button id="btn-export-csv">Export CSV</button>' +
     '<button id="btn-print" class="primary">Print or save as PDF</button>' +
   '</div>';
 
@@ -1121,6 +1169,33 @@ export function renderReport() {
     renderIntro();
   });
   el('btn-print').addEventListener('click', function() { window.print(); });
+  el('btn-export-json').addEventListener('click', function() {
+    var report = buildReportExport({
+      profile: state.profile, scope: state.scope, role: state.role, depth: state.depth,
+      scores: scores, tier: tier, recs: recs, toolAnalysis: toolAnalysis,
+      regulatoryExposure: regulatoryExposure, toolPortfolioRisk: toolPortfolioRisk,
+      frameworkCoverage: frameworkCoverage, confidenceGap: confidenceGap
+    });
+    triggerDownload('ai-governance-report.json', JSON.stringify(report, null, 2), 'application/json');
+  });
+  el('btn-export-csv').addEventListener('click', function() {
+    triggerDownload('ai-governance-recommendations.csv', recommendationsToCsv(recs), 'text/csv');
+  });
+}
+
+// Standard browser-side file download (Blob + object URL + a synthetic,
+// immediately-removed <a>) -- no server round-trip, consistent with this
+// project's standalone/no-backend-by-default architecture (backlog SS1.4.2).
+export function triggerDownload(filename, content, mimeType) {
+  var blob = new Blob([content], { type: mimeType });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export function renderToolReview(analysis) {
