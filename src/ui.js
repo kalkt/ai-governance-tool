@@ -58,6 +58,7 @@ import {
   explainGapsByPriority,
   explainDimension,
   explainFunctionScore,
+  applyDmaicFraming,
   GOVERNANCE_GATING_THRESHOLD,
   evaluateToolAdoption,
   describeToolAdoptionOutcome
@@ -979,6 +980,12 @@ export function renderReport() {
   var recs = criticalGaps.concat(
     applyRoleFraming(applyScopeFraming(buildRecommendations(gaps), state.scope), state.role, state.scope)
   ).slice(0, 8);
+  // B16: DMAIC framing computed once, after role/scope framing has already
+  // finalized each rec's body (dmaic.improve is that same body) -- applied
+  // to the already-capped top-8 list, not the full gap set, so this can
+  // never re-rank or add recommendations, only annotate the ones already
+  // chosen.
+  var dmaicRecs = applyDmaicFraming(recs, state.questions, state.answers);
   var toolAnalysis = classifyToolsInUse(state.toolsSelected, state.otherTools);
   var modules = getApplicableModules(state.profile);
   var confidenceGap = computeConfidenceGap(scores, state.confidenceAnswers);
@@ -1156,16 +1163,26 @@ export function renderReport() {
   '</div>';
 
   // ---- 8. Prioritized Recommendations ----
+  // B16: each card follows a Define/Measure/Analyze/Improve/Control
+  // structure -- Define is the title above (already a "what's wrong"
+  // statement, no separate field needed); Measure/Analyze/Control are new,
+  // Improve is the existing recommendation body, unsplit and unchanged.
   html += '<div class="section">' + sectionHeading(8, 'Prioritized Recommendations') +
-    (recs.length === 0 ? '<div class="callout">You have strong foundations. Lock in a quarterly review to keep governance current.</div>' :
-    recs.map(function(r) {
+    (dmaicRecs.length === 0 ? '<div class="callout">You have strong foundations. Lock in a quarterly review to keep governance current.</div>' :
+    '<p class="qmeta" style="margin-bottom:12px;">Each item below follows Define → Measure → Analyze → Improve → Control: what\'s wrong (the title), what the evidence shows, why it matters, what to do, and how to confirm it stays resolved.</p>' +
+    dmaicRecs.map(function(r) {
       var cls = r.priority === 'critical' ? 'prio-critical' : (r.priority === 'high' ? 'prio-high' : (r.priority === 'medium' ? 'prio-med' : 'prio-low'));
       var plabel = r.priority === 'critical' ? 'Critical' : (r.priority === 'high' ? 'High priority' : (r.priority === 'medium' ? 'Medium priority' : 'Maintain'));
       var moduleTag = r.module !== 'base' ? ' • ' + (r.module === 'nonprofit' ? 'Nonprofit module' : 'Youth-serving module') : '';
       return '<div class="rec"><div class="rec-head"><p class="rec-title">' + r.title + '</p>' +
         '<span class="' + cls + '">' + plabel + '</span></div>' +
         '<p class="rec-meta">' + FRAMEWORK.functions[r.fn].name + ' function' + moduleTag + '</p>' +
-        '<p class="rec-body">' + r.body + '</p></div>';
+        '<div class="dmaic">' +
+          '<p class="dmaic-step"><span class="dmaic-label">Measure</span>' + r.dmaic.measure + '</p>' +
+          '<p class="dmaic-step"><span class="dmaic-label">Analyze</span>' + r.dmaic.analyze + '</p>' +
+          '<p class="dmaic-step"><span class="dmaic-label">Improve</span>' + r.dmaic.improve + '</p>' +
+          '<p class="dmaic-step"><span class="dmaic-label">Control</span>' + r.dmaic.control + '</p>' +
+        '</div></div>';
     }).join('')) +
   '</div>';
 
@@ -1207,7 +1224,7 @@ export function renderReport() {
   el('btn-export-json').addEventListener('click', function() {
     var report = buildReportExport({
       profile: state.profile, scope: state.scope, role: state.role, depth: state.depth,
-      scores: scores, tier: tier, recs: recs, toolAnalysis: toolAnalysis,
+      scores: scores, tier: tier, recs: dmaicRecs, toolAnalysis: toolAnalysis,
       regulatoryExposure: regulatoryExposure, toolPortfolioRisk: toolPortfolioRisk,
       frameworkCoverage: frameworkCoverage, confidenceGap: confidenceGap
     });

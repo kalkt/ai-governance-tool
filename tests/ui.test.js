@@ -33,7 +33,7 @@ import {
   renderToolAdoptionResult,
   triggerDownload
 } from '../src/ui.js';
-import { getQuestionsForAssessment } from '../src/logic.js';
+import { getQuestionsForAssessment, identifyGaps, buildRecommendations } from '../src/logic.js';
 import { TOOL_MASTER_LIST, TOOL_ADOPTION_QUESTIONS, ANNEX_III_DOMAINS } from '../src/data.js';
 
 function setupDom() {
@@ -290,7 +290,9 @@ describe('state.role reaching the report end-to-end', () => {
   it('appends the role visibility caveat to recommendation bodies for an employee assessing the whole org', () => {
     primeReportState('org', 'employee');
     renderReport();
-    const bodies = Array.from(document.querySelectorAll('.rec-body')).map(function(el) { return el.textContent; });
+    // B16: the recommendation body (role/scope framing included) now renders
+    // inside the DMAIC "Improve" step, not a standalone .rec-body element.
+    const bodies = Array.from(document.querySelectorAll('.dmaic-step')).map(function(el) { return el.textContent; });
     expect(bodies.length).toBeGreaterThan(0);
     expect(bodies.some(function(b) { return b.includes('individual employee'); })).toBe(true);
   });
@@ -298,7 +300,7 @@ describe('state.role reaching the report end-to-end', () => {
   it('does not append any role caveat to recommendation bodies for leadership', () => {
     primeReportState('org', 'leadership');
     renderReport();
-    const bodies = Array.from(document.querySelectorAll('.rec-body')).map(function(el) { return el.textContent; });
+    const bodies = Array.from(document.querySelectorAll('.dmaic-step')).map(function(el) { return el.textContent; });
     expect(bodies.length).toBeGreaterThan(0);
     expect(bodies.some(function(b) { return b.includes('individual employee') || b.includes('single department/function'); })).toBe(false);
   });
@@ -309,7 +311,7 @@ describe('state.role reaching the report end-to-end', () => {
     // only the scope framing note should appear, not a role caveat.
     primeReportState('department', 'employee');
     renderReport();
-    const bodies = Array.from(document.querySelectorAll('.rec-body')).map(function(el) { return el.textContent; });
+    const bodies = Array.from(document.querySelectorAll('.dmaic-step')).map(function(el) { return el.textContent; });
     expect(bodies.some(function(b) { return b.includes('Scoped to this department'); })).toBe(true);
     expect(bodies.some(function(b) { return b.includes('individual employee'); })).toBe(false);
   });
@@ -1168,5 +1170,61 @@ describe('drill-down from summary counts/scores into itemized reasoning (B15)', 
     document.querySelector('[data-drill="drill-panel-scorefn-govern"]').click();
     expect(scorePanel.classList.contains('hidden')).toBe(true);
     expect(covPanel.classList.contains('hidden')).toBe(false);
+  });
+});
+
+describe('DMAIC-structured recommendations (B16)', () => {
+  function primeReportState() {
+    state.scope = { id: 'org', name: '' };
+    state.role = { id: null, department: '' };
+    state.profile.orgType = 'for-profit';
+    state.profile.servesYouth = false;
+    state.depth = 'quick';
+    state.questions = getQuestionsForAssessment(state.profile, 'quick');
+    state.idx = 0;
+    state.answers = {};
+    state.questions.forEach(function(q) { state.answers[q.id] = 0; }); // every question a gap -> critical entry fires too
+    state.confidenceAnswers = {};
+  }
+
+  it('renders all four DMAIC labels (Measure/Analyze/Improve/Control) on every recommendation card', () => {
+    primeReportState();
+    renderReport();
+    const cards = document.querySelectorAll('.rec');
+    expect(cards.length).toBeGreaterThan(0);
+    cards.forEach(function(card) {
+      const labels = Array.from(card.querySelectorAll('.dmaic-label')).map(function(l) { return l.textContent; });
+      expect(labels).toEqual(['Measure', 'Analyze', 'Improve', 'Control']);
+    });
+  });
+
+  it("the critical entry's Measure step references the Governance Score Breakdown drill-down rather than repeating it", () => {
+    primeReportState();
+    renderReport();
+    const criticalCard = document.querySelector('.prio-critical').closest('.rec');
+    expect(criticalCard.textContent).toContain('Governance Score Breakdown drill-down above');
+  });
+
+  it("a question-level recommendation's Measure step quotes the actual answer given", () => {
+    primeReportState();
+    renderReport();
+    const highCard = document.querySelector('.prio-high').closest('.rec');
+    expect(highCard.textContent).toMatch(/You answered: "/);
+  });
+
+  it('the Improve text is exactly buildRecommendations\' own body for that question, not a reworded summary', () => {
+    primeReportState();
+    renderReport();
+    const gaps = identifyGaps(state.questions, state.answers);
+    const expectedBody = buildRecommendations(gaps)[0].body;
+    const firstHighCard = document.querySelectorAll('.prio-high')[0].closest('.rec');
+    const improveStep = Array.from(firstHighCard.querySelectorAll('.dmaic-step')).find(function(s) { return s.textContent.indexOf('Improve') === 0; });
+    expect(improveStep.textContent).toBe('Improve' + expectedBody);
+  });
+
+  it('shows the Define/Measure/Analyze/Improve/Control explainer line above the recommendation list', () => {
+    primeReportState();
+    renderReport();
+    expect(document.getElementById('stage-report').innerHTML).toContain('Define → Measure → Analyze → Improve → Control');
   });
 });

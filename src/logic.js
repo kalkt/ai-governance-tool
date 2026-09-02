@@ -514,7 +514,14 @@ export function buildRecommendations(gaps) {
       recs.push({
         priority: pri, fn: g.fn, module: g.q.module,
         title: REC_TITLES[g.q.id] || 'Address this gap',
-        body: body
+        body: body,
+        // questionId/dimension (B16): the originating question and its
+        // GOVERNANCE_DIMENSIONS bucket, carried forward purely so a later
+        // consumer (applyDmaicFraming) can trace this recommendation back to
+        // real evidence -- additive fields only, no existing caller reads
+        // fewer fields than before, and no existing field's meaning changed.
+        questionId: g.q.id,
+        dimension: g.q.dimension || null
       });
     });
   });
@@ -581,8 +588,13 @@ export function applyScopeFraming(recs, scope) {
   } else {
     return recs;
   }
+  // Spreads the original object (B16 fix) rather than reconstructing a fixed
+  // field list -- the earlier hand-picked {priority,fn,module,title,body}
+  // shape silently dropped buildRecommendations' later-added questionId/
+  // dimension fields, which applyDmaicFraming needs downstream. Spreading
+  // means any future field survives this pass-through too, not just today's.
   return recs.map(function(r) {
-    return { priority: r.priority, fn: r.fn, module: r.module, title: r.title, body: r.body + ' ' + note };
+    return Object.assign({}, r, { body: r.body + ' ' + note });
   });
 }
 
@@ -633,8 +645,9 @@ export function roleVisibilityCaveat(role, scope) {
 export function applyRoleFraming(recs, role, scope) {
   var caveat = roleVisibilityCaveat(role, scope);
   if (!caveat) return recs;
+  // Spread, not a fixed field list -- see applyScopeFraming's own B16 note above.
   return recs.map(function(r) {
-    return { priority: r.priority, fn: r.fn, module: r.module, title: r.title, body: r.body + ' ' + caveat };
+    return Object.assign({}, r, { body: r.body + ' ' + caveat });
   });
 }
 
@@ -890,8 +903,15 @@ export function buildReportExport(input) {
     },
     frameworkCoverage: input.frameworkCoverage,
     riskRegister: buildRiskRegister(input.toolAnalysis),
+    // B16: dmaic is included only when the caller already ran the recs
+    // through applyDmaicFraming (its own dedicated Define/Measure/Analyze/
+    // Improve/Control fields) -- this function never computes it itself, to
+    // avoid recomputing report content export-side that the caller may have
+    // already built for on-screen display.
     recommendations: input.recs.map(function(r) {
-      return { title: r.title, priority: r.priority, nistFunction: r.fn, module: r.module, body: r.body };
+      var row = { title: r.title, priority: r.priority, nistFunction: r.fn, module: r.module, body: r.body };
+      if (r.dmaic) row.dmaic = r.dmaic;
+      return row;
     }),
     disclaimer: 'Self-assessment for internal planning, not a compliance certification or legal advice. Tool classifications are point-in-time and criteria-based.'
   };
@@ -921,13 +941,21 @@ export function toCsv(rows, columns) {
 // register) is already in the JSON export above, and forcing dissimilar
 // nested shapes into one flat CSV would produce something less useful than
 // either format done properly.
+// B16: Measure/Analyze/Improve/Control columns are populated only when the
+// caller already ran recs through applyDmaicFraming -- (r.dmaic || {}).x
+// reads as blank cells rather than throwing for a plain buildRecommendations()
+// list, so this stays backward-compatible with any caller that hasn't
+// adopted DMAIC framing.
 export function recommendationsToCsv(recs) {
   return toCsv(recs, [
     { label: 'Priority', get: function(r) { return r.priority; } },
     { label: 'NIST Function', get: function(r) { return r.fn; } },
     { label: 'Module', get: function(r) { return r.module; } },
     { label: 'Title', get: function(r) { return r.title; } },
-    { label: 'Body', get: function(r) { return r.body; } }
+    { label: 'Measure', get: function(r) { return (r.dmaic || {}).measure; } },
+    { label: 'Analyze', get: function(r) { return (r.dmaic || {}).analyze; } },
+    { label: 'Improve', get: function(r) { return r.dmaic ? r.dmaic.improve : r.body; } },
+    { label: 'Control', get: function(r) { return (r.dmaic || {}).control; } }
   ]);
 }
 
@@ -1009,5 +1037,73 @@ export function explainFunctionScore(questions, answers, fn) {
       var opt = q.options.find(function(o) { return o.v === v; });
       return { id: q.id, text: q.text, dimension: q.dimension || null, v: v, label: opt ? opt.label : null };
     });
+}
+
+// The single answered question a specific recommendation traces back to
+// (B16's Measure step -- see applyDmaicFraming below). Returns null for an
+// unknown id or a question that was never answered, rather than a
+// zero-value evidence row that would misrepresent "no data" as "answered 0."
+export function explainQuestion(questions, answers, questionId) {
+  var q = questions.find(function(qq) { return qq.id === questionId; });
+  if (!q || answers[questionId] === undefined) return null;
+  var v = answers[questionId];
+  var opt = q.options.find(function(o) { return o.v === v; });
+  return { id: q.id, text: q.text, fn: q.fn, dimension: q.dimension || null, v: v, label: opt ? opt.label : null };
+}
+
+// ============================================================================
+// B16: DMAIC-style (Define/Measure/Analyze/Improve/Control) restructuring of
+// the Prioritized Recommendations section. No prior design thread or
+// research item scoped exactly how this Six Sigma pattern should map onto a
+// recommendation card -- a genuine decide-and-document call, documented in
+// full in the backlog entry for this item.
+//
+// Deliberately does NOT re-author the 53 REC_BODIES paragraphs into five
+// separate fields each -- that's a large, disproportionate content-authoring
+// project for what this item actually asks for (a restructuring of
+// presentation, not a rewrite of already-reviewed recommendation prose).
+// Define = the recommendation's own already-existing title (no new field
+// needed -- it already is a "what's wrong" statement). Improve = the
+// existing body verbatim, unchanged and unsplit. Measure and Analyze are
+// newly built here from data this codebase already has (the originating
+// question/dimension, via buildRecommendations'/B15's own explain* family)
+// -- real evidence, not reworded prose. Control is new, templated,
+// decide-and-document authored copy (same discipline as B4/B7/B10/B13's own)
+// -- a priority-based re-check cadence, not a per-question claim.
+// ============================================================================
+export function applyDmaicFraming(recs, questions, answers) {
+  return recs.map(function(r) {
+    var measure, analyze;
+
+    if (r.priority === 'critical') {
+      // B7's critical entry only ever fires on the Ownership & Accountability
+      // gating rule (B5/R2) -- identifyCriticalGaps has no other dimension it
+      // can produce today, so that's addressed directly here rather than
+      // threading a new field through a function that can only ever mean one
+      // thing. Measure points back at B15's own drill-down for the itemized
+      // list rather than repeating it -- the two features shouldn't duplicate
+      // the same evidence twice on one page.
+      var dimRows = explainDimension(questions, answers, 'ownership-accountability');
+      measure = dimRows.length > 0 ?
+        'Averaged across ' + dimRows.length + ' answered Ownership & Accountability question' + (dimRows.length === 1 ? '' : 's') + ' -- see the Governance Score Breakdown drill-down above for each one.' :
+        'No Ownership & Accountability questions have been answered yet.';
+      analyze = 'Ownership & Accountability is a structural prerequisite the other four dimensions depend on, not just one-fifth of an average -- see this finding\'s own reasoning above for the CSA whitepaper evidence.';
+    } else {
+      var evidence = r.questionId ? explainQuestion(questions, answers, r.questionId) : null;
+      measure = evidence ? 'You answered: "' + evidence.label + '"' : 'No specific answer on file for this item.';
+      var dim = r.dimension ? GOVERNANCE_DIMENSIONS.find(function(d) { return d.id === r.dimension; }) : null;
+      analyze = dim ?
+        'This sits in the ' + dim.label + ' dimension (' + dim.weight + '% of your overall Governance Maturity score) within the ' + FRAMEWORK.functions[r.fn].name + ' function.' :
+        'This sits in the ' + FRAMEWORK.functions[r.fn].name + ' function.';
+    }
+
+    var control = (r.priority === 'critical' || r.priority === 'high') ?
+      'Re-check this at your next quarterly review -- treat it as unresolved until you can point to a specific artifact.' :
+      'Revisit at your next standard governance review (recommended at least annually) to confirm it has actually been addressed.';
+
+    return Object.assign({}, r, {
+      dmaic: { measure: measure, analyze: analyze, improve: r.body, control: control }
+    });
+  });
 }
 

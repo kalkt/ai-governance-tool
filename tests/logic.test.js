@@ -36,7 +36,9 @@ import {
   buildExecutiveSummary,
   explainGapsByPriority,
   explainDimension,
-  explainFunctionScore
+  explainFunctionScore,
+  explainQuestion,
+  applyDmaicFraming
 } from '../src/logic.js';
 import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST, AGGREGATION_MIN_GROUP_SIZE, TOOL_ADOPTION_QUESTIONS } from '../src/data.js';
 
@@ -604,6 +606,19 @@ describe('buildRecommendations', () => {
     const gaps = [{ fn: 'govern', module: 'base', v: 0, priority: 'high', q: { id: 'np1', module: 'nonprofit' } }];
     const recs = buildRecommendations(gaps);
     expect(recs[0].module).toBe('nonprofit');
+  });
+
+  it('carries the originating question id and its dimension forward (B16)', () => {
+    const gaps = [{ fn: 'govern', v: 0, priority: 'high', q: { id: 'g1', module: 'base', dimension: 'controls-evidence' } }];
+    const recs = buildRecommendations(gaps);
+    expect(recs[0].questionId).toBe('g1');
+    expect(recs[0].dimension).toBe('controls-evidence');
+  });
+
+  it('sets dimension to null when the originating question has no dimension tagged', () => {
+    const gaps = [{ fn: 'govern', v: 0, priority: 'high', q: { id: 'g1', module: 'base' } }];
+    const recs = buildRecommendations(gaps);
+    expect(recs[0].dimension).toBeNull();
   });
 });
 
@@ -1285,6 +1300,13 @@ describe('applyScopeFraming', () => {
   it('handles an empty recs array', () => {
     expect(applyScopeFraming([], { id: 'department', name: 'Ops' })).toEqual([]);
   });
+
+  it('preserves questionId/dimension (B16) rather than dropping fields it doesn\'t itself use', () => {
+    const recWithDmaicFields = [{ priority: 'high', fn: 'govern', module: 'base', title: 'T', body: 'B', questionId: 'g1', dimension: 'controls-evidence' }];
+    const result = applyScopeFraming(recWithDmaicFields, { id: 'department', name: 'Ops' });
+    expect(result[0].questionId).toBe('g1');
+    expect(result[0].dimension).toBe('controls-evidence');
+  });
 });
 
 describe('describeRole', () => {
@@ -1383,6 +1405,13 @@ describe('applyRoleFraming', () => {
 
   it('handles an empty recs array', () => {
     expect(applyRoleFraming([], { id: 'employee' }, { id: 'org' })).toEqual([]);
+  });
+
+  it('preserves questionId/dimension (B16) rather than dropping fields it doesn\'t itself use', () => {
+    const recWithDmaicFields = [{ priority: 'high', fn: 'govern', module: 'base', title: 'T', body: 'B', questionId: 'g1', dimension: 'controls-evidence' }];
+    const result = applyRoleFraming(recWithDmaicFields, { id: 'employee' }, { id: 'org' });
+    expect(result[0].questionId).toBe('g1');
+    expect(result[0].dimension).toBe('controls-evidence');
   });
 
   it('composes cleanly after applyScopeFraming (both notes present)', () => {
@@ -1949,17 +1978,26 @@ describe('toCsv (B14)', () => {
   });
 });
 
-describe('recommendationsToCsv (B14)', () => {
-  it('has one column per recommendation field, in a stable order', () => {
+describe('recommendationsToCsv (B14/B16)', () => {
+  it('falls back to the plain body in the Improve column, and blank Measure/Analyze/Control, for a plain (non-DMAIC-framed) rec', () => {
     const recs = [{ priority: 'high', fn: 'govern', module: 'base', title: 'Title one', body: 'Body one, with a comma' }];
     const csv = recommendationsToCsv(recs);
     const lines = csv.split('\r\n');
-    expect(lines[0]).toBe('Priority,NIST Function,Module,Title,Body');
-    expect(lines[1]).toBe('high,govern,base,Title one,"Body one, with a comma"');
+    expect(lines[0]).toBe('Priority,NIST Function,Module,Title,Measure,Analyze,Improve,Control');
+    expect(lines[1]).toBe('high,govern,base,Title one,,,"Body one, with a comma",');
+  });
+
+  it('uses the dmaic fields when the rec has already been through applyDmaicFraming', () => {
+    const recs = [{
+      priority: 'high', fn: 'govern', module: 'base', title: 'Title one', body: 'Plain body',
+      dmaic: { measure: 'You answered: "No"', analyze: 'This sits in the Govern function.', improve: 'Do the thing', control: 'Re-check quarterly' }
+    }];
+    const lines = recommendationsToCsv(recs).split('\r\n');
+    expect(lines[1]).toBe('high,govern,base,Title one,"You answered: ""No""",This sits in the Govern function.,Do the thing,Re-check quarterly');
   });
 
   it('produces just a header row for an empty recommendations list', () => {
-    expect(recommendationsToCsv([])).toBe('Priority,NIST Function,Module,Title,Body');
+    expect(recommendationsToCsv([])).toBe('Priority,NIST Function,Module,Title,Measure,Analyze,Improve,Control');
   });
 });
 
@@ -2072,5 +2110,111 @@ describe('explainFunctionScore (B15)', () => {
     questions.filter(q => q.fn === 'map').forEach(q => { answers[q.id] = 2; });
     const rows = explainFunctionScore(questions, answers, 'govern');
     expect(rows).toEqual([]);
+  });
+});
+
+describe('explainQuestion (B16)', () => {
+  it('returns the question and the given answer\'s label', () => {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    const q = questions[0];
+    const row = explainQuestion(questions, { [q.id]: 1 }, q.id);
+    expect(row.id).toBe(q.id);
+    expect(row.text).toBe(q.text);
+    expect(row.fn).toBe(q.fn);
+    expect(row.dimension).toBe(q.dimension);
+    expect(row.v).toBe(1);
+    expect(row.label).toBe(q.options.find(o => o.v === 1).label);
+  });
+
+  it('returns null for an unanswered question', () => {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    expect(explainQuestion(questions, {}, questions[0].id)).toBeNull();
+  });
+
+  it('returns null for an unknown question id', () => {
+    expect(explainQuestion(BASE_QUESTIONS, { x: 1 }, 'not-a-real-id')).toBeNull();
+  });
+});
+
+// ============================================================================
+// B16: DMAIC-style (Define/Measure/Analyze/Improve/Control) recommendation
+// restructuring
+// ============================================================================
+
+describe('applyDmaicFraming (B16)', () => {
+  function quickFixture(allAnswers) {
+    const questions = BASE_QUESTIONS.filter(q => q.depths.indexOf('quick') !== -1);
+    const answers = {};
+    questions.forEach(q => { answers[q.id] = allAnswers; });
+    return { questions, answers };
+  }
+
+  it('Improve is always the recommendation\'s own body, untouched', () => {
+    const { questions, answers } = quickFixture(0);
+    const scores = computeScores(questions, answers);
+    const gaps = identifyGaps(questions, answers);
+    const recs = identifyCriticalGaps(scores).concat(buildRecommendations(gaps));
+    const framed = applyDmaicFraming(recs, questions, answers);
+    framed.forEach((r, i) => expect(r.dmaic.improve).toBe(recs[i].body));
+  });
+
+  it('the critical entry\'s Measure points at the Governance Score Breakdown drill-down rather than repeating the itemized list', () => {
+    const { questions, answers } = quickFixture(0); // bottom-tier ownership-accountability -> critical entry fires
+    const scores = computeScores(questions, answers);
+    const gaps = identifyGaps(questions, answers);
+    const recs = identifyCriticalGaps(scores).concat(buildRecommendations(gaps));
+    const framed = applyDmaicFraming(recs, questions, answers);
+    const critical = framed.find(r => r.priority === 'critical');
+    expect(critical.dmaic.measure).toMatch(/Governance Score Breakdown drill-down above/);
+    expect(critical.dmaic.analyze).toMatch(/structural prerequisite/);
+  });
+
+  it('a question-level recommendation\'s Measure quotes the actual answer given', () => {
+    const { questions, answers } = quickFixture(3); // maxed out -> no critical entry, but still build one gap manually
+    answers[questions[0].id] = 0; // force exactly one high-priority gap
+    const scores = computeScores(questions, answers);
+    const gaps = identifyGaps(questions, answers);
+    const recs = buildRecommendations(gaps);
+    const framed = applyDmaicFraming(recs, questions, answers);
+    const rec = framed.find(r => r.questionId === questions[0].id);
+    expect(rec.dmaic.measure).toBe('You answered: "' + questions[0].options.find(o => o.v === 0).label + '"');
+  });
+
+  it('Analyze cites the recommendation\'s dimension label and weight when one is tagged', () => {
+    const { questions, answers } = quickFixture(3);
+    answers[questions[0].id] = 0;
+    const gaps = identifyGaps(questions, answers);
+    const recs = buildRecommendations(gaps);
+    const framed = applyDmaicFraming(recs, questions, answers);
+    const rec = framed.find(r => r.questionId === questions[0].id);
+    const dim = GOVERNANCE_DIMENSIONS.find(d => d.id === questions[0].dimension);
+    expect(rec.dmaic.analyze).toContain(dim.label);
+    expect(rec.dmaic.analyze).toContain(dim.weight + '%');
+  });
+
+  it('Control gives a shorter re-check cadence for critical/high than for medium priority', () => {
+    const { questions, answers } = quickFixture(0);
+    const scores = computeScores(questions, answers);
+    const gaps = identifyGaps(questions, answers);
+    const recs = identifyCriticalGaps(scores).concat(buildRecommendations(gaps));
+    const framed = applyDmaicFraming(recs, questions, answers);
+    framed.filter(r => r.priority === 'critical' || r.priority === 'high').forEach(r => expect(r.dmaic.control).toMatch(/quarterly/));
+
+    // Force at least one medium-priority gap to check the other branch.
+    const mediumAnswers = { ...answers };
+    mediumAnswers[questions[1].id] = 1;
+    const mediumGaps = identifyGaps(questions, mediumAnswers);
+    const mediumRecs = buildRecommendations(mediumGaps);
+    const mediumFramed = applyDmaicFraming(mediumRecs, questions, mediumAnswers);
+    const mediumRec = mediumFramed.find(r => r.priority === 'medium');
+    expect(mediumRec.dmaic.control).toMatch(/annually/);
+  });
+
+  it('handles a recommendation with no traceable question gracefully (unknown-id fallback)', () => {
+    const { questions, answers } = quickFixture(3);
+    const recs = [{ priority: 'high', fn: 'govern', module: 'base', title: 'Address this gap', body: 'Body text', questionId: 'not-a-real-id', dimension: null }];
+    const framed = applyDmaicFraming(recs, questions, answers);
+    expect(framed[0].dmaic.measure).toBe('No specific answer on file for this item.');
+    expect(framed[0].dmaic.analyze).toBe('This sits in the ' + FRAMEWORK.functions.govern.name + ' function.');
   });
 });
