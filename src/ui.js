@@ -981,6 +981,100 @@ function drillPanel(id, items) {
   '</div>';
 }
 
+// ============================================================================
+// VISUALIZATIONS. Each form below was picked for the job the specific data
+// does, not for looks -- see the matching CSS comment block in index.html for
+// the same reasoning kept next to the styles. None of these compute anything
+// new; every input is already produced by src/logic.js.
+// ============================================================================
+
+// Bullet gauge (Stephen Few's bullet-graph pattern): a single measure (overall
+// readiness, 0-100) against the three qualitative bands computeTier() already
+// defines (high risk 0-39 / moderate 40-69 / lower risk 70-100). A round
+// speedometer-style gauge was deliberately not used -- it wastes most of its
+// area on empty arc and makes the exact value harder to read than a straight
+// scale; a bullet graph puts the bands and the marker on one line a reader
+// can absorb in under a second, which is the report's own stated goal.
+function renderBulletGauge(score) {
+  return '<div class="bullet-gauge" role="img" aria-label="Overall readiness ' + score + ' percent">' +
+    '<div class="bullet-track">' +
+      '<div class="bullet-band band-high" style="width:40%"></div>' +
+      '<div class="bullet-band band-med" style="width:30%"></div>' +
+      '<div class="bullet-band band-low" style="width:30%"></div>' +
+      '<div class="bullet-marker" style="left:' + score + '%" title="Overall: ' + score + '%"></div>' +
+    '</div>' +
+    '<div class="viz-legend">' +
+      '<span class="swatch"><i class="dot band-high"></i>0–39 Higher risk</span>' +
+      '<span class="swatch"><i class="dot band-med"></i>40–69 Moderate</span>' +
+      '<span class="swatch"><i class="dot band-low"></i>70–100 Lower risk</span>' +
+    '</div>' +
+  '</div>';
+}
+
+// Gate-threshold tick: an annotation, not a new mark type -- a single 2px line
+// on the Ownership & Accountability dimension's own existing meter bar, placed
+// at GOVERNANCE_GATING_THRESHOLD (40%). The gating rule already gets a
+// paragraph of text in the report (the "capped regardless of the other four
+// dimensions" callout); this puts the same rule where a reader can actually
+// see it apply, on the one bar it governs, instead of only in prose.
+function renderGateTick() {
+  return '<i class="gate-tick" style="left:' + GOVERNANCE_GATING_THRESHOLD + '%" title="Gate threshold: ' + GOVERNANCE_GATING_THRESHOLD + '%"></i>';
+}
+
+// Confidence-vs-evidence dumbbell, one per NIST function. The job here is
+// "before/after per item" (evidence vs. self-reported confidence), and per
+// R16 (research-r16-multi-rater-divergence.md, already in this project) the
+// finding that matters is the SIZE and DIRECTION of the gap, not either point
+// alone -- so the gap itself is the mark (the connecting line), not something
+// the reader has to compute by comparing two separate bar lengths the way the
+// previous two-bar layout required. Evidence is the filled dot, confidence
+// the ring, so identity (which point is which) reads independently of color;
+// color instead carries the status (aligned/overconfident/underconfident),
+// consistent with the report's own existing gap-badge language above it.
+function renderConfidenceDumbbell(g) {
+  var status = g.status || 'unknown';
+  var evidencePct = g.evidencePct;
+  var confidencePct = g.confidencePct;
+  if (evidencePct === null || confidencePct === null) {
+    return '<p class="qmeta">Not enough data to compare evidence and confidence for this function.</p>';
+  }
+  var lo = Math.min(evidencePct, confidencePct);
+  var hi = Math.max(evidencePct, confidencePct);
+  return '<div class="dumbbell-track" role="img" aria-label="Evidence ' + evidencePct + ' percent, confidence ' + confidencePct + ' percent">' +
+    '<div class="dumbbell-connector ' + status + '" style="left:' + lo + '%; width:' + (hi - lo) + '%"></div>' +
+    '<div class="dumbbell-dot mark-evidence ' + status + '" style="left:' + evidencePct + '%" title="Evidence: ' + evidencePct + '%"></div>' +
+    '<div class="dumbbell-dot mark-confidence ' + status + '" style="left:' + confidencePct + '%" title="Confidence: ' + confidencePct + '%"></div>' +
+  '</div>';
+}
+
+// Tool portfolio composition bar: a part-to-whole question (what share of the
+// declared tool inventory is high-risk / caution / lower-risk / unclassified)
+// -- shown as one 100%-stacked horizontal bar, deliberately not a donut. A
+// stakeholder scanning quickly needs the high-risk share to be the thing that
+// jumps out; segment length does that directly, where a donut would ask them
+// to compare arc angles instead. Returns '' when there is nothing declared,
+// matching the section's own existing empty state.
+function renderCompositionBar(toolPortfolioRisk) {
+  var total = toolPortfolioRisk.highRiskCount + toolPortfolioRisk.cautionCount + toolPortfolioRisk.lowerRiskCount + toolPortfolioRisk.unclassifiedCount;
+  if (total === 0) return '';
+  var segs = [
+    { cls: 'seg-high', count: toolPortfolioRisk.highRiskCount, label: 'High-risk' },
+    { cls: 'seg-caution', count: toolPortfolioRisk.cautionCount, label: 'Caution' },
+    { cls: 'seg-low', count: toolPortfolioRisk.lowerRiskCount, label: 'Lower-risk' },
+    { cls: 'seg-unclassified', count: toolPortfolioRisk.unclassifiedCount, label: 'Unclassified' }
+  ];
+  return '<div class="composition-bar" role="img" aria-label="Tool portfolio composition">' +
+    segs.filter(function(s) { return s.count > 0; }).map(function(s) {
+      return '<span class="seg ' + s.cls + '" style="width:' + Math.round((s.count / total) * 100) + '%" title="' + s.label + ': ' + s.count + '"></span>';
+    }).join('') +
+  '</div>' +
+  '<div class="viz-legend">' +
+    segs.filter(function(s) { return s.count > 0; }).map(function(s) {
+      return '<span class="swatch"><i class="dot ' + s.cls + '"></i>' + s.label + ' (' + s.count + ')</span>';
+    }).join('') +
+  '</div>';
+}
+
 export function renderReport() {
   show('stage-report');
   renderStepper('report');
@@ -1080,14 +1174,17 @@ export function renderReport() {
   var overconfidentFns = Object.keys(confidenceGap).filter(function(k) { return confidenceGap[k].status === 'overconfident'; });
 
   html += '<div class="section">' + sectionHeading(3, 'Governance Score Breakdown') +
-    '<p class="qmeta" style="margin-bottom:12px;">Overall readiness (above) is a weighted average of these five dimensions, not a flat average of every question -- see backlog SS1.4.5 for the weighting rationale.</p>' +
+    '<p class="qmeta" style="margin-bottom:4px;">Overall readiness is a weighted average of these five dimensions, not a flat average of every question -- see backlog SS1.4.5 for the weighting rationale.</p>' +
+    renderBulletGauge(scores.overall) +
+    '<p class="b10-label" style="margin:16px 0 8px;">By dimension</p>' +
     '<div class="fn-grid">' +
       GOVERNANCE_DIMENSIONS.map(function(d) {
         var pct = scores.dimensionPct[d.id];
+        var isGated = d.id === 'ownership-accountability';
         return '<button class="fn drillable" type="button" data-drill="drill-panel-dim-' + d.id + '" aria-expanded="false">' +
           '<div class="fn-top"><h3>' + d.label + '</h3><span class="fn-score">' + (pct !== null ? pct + '%' : '—') + '</span></div>' +
-          '<div class="bar"><span style="width:' + (pct || 0) + '%"></span></div>' +
-          '<p class="fn-desc">Weight: ' + d.weight + '%</p><p class="drill-hint">Click for detail ▸</p></button>';
+          '<div class="bar"><span style="width:' + (pct || 0) + '%"></span>' + (isGated ? renderGateTick() : '') + '</div>' +
+          '<p class="fn-desc">Weight: ' + d.weight + '%' + (isGated ? ' · red tick marks the ' + GOVERNANCE_GATING_THRESHOLD + '% gate threshold' : '') + '</p><p class="drill-hint">Click for detail ▸</p></button>';
       }).join('') +
     '</div>' +
     GOVERNANCE_DIMENSIONS.map(function(d) { return drillPanel('drill-panel-dim-' + d.id, explainDimension(state.questions, state.answers, d.id)); }).join('') +
@@ -1110,6 +1207,7 @@ export function renderReport() {
     '<p class="qmeta" style="margin-bottom:12px;">The evidence score above reflects what you documented. This asks how prepared you said you FEEL, collected separately so it can not just echo the evidence answers back. A large gap in either direction is itself a finding.</p>' +
     (overconfidentFns.length > 0 ?
       '<div class="callout warning"><strong>Confidence outpaces evidence in ' + overconfidentFns.map(function(k) { return FRAMEWORK.functions[k].name; }).join(' and ') + '.</strong> Your team feels more prepared here than the evidence supports — often the riskiest kind of gap, since it rarely draws attention on its own.</div>' : '') +
+    '<div class="dumbbell-legend"><span class="mark"><i class="mark-dot"></i>Evidence</span><span class="mark"><i class="mark-dot ring"></i>Confidence</span></div>' +
     '<div class="fn-grid">' +
       Object.keys(FRAMEWORK.functions).map(function(k) {
         var g = confidenceGap[k];
@@ -1118,8 +1216,7 @@ export function renderReport() {
                           g.status === 'aligned' ? 'Perception matches evidence' : 'Not enough data';
         return '<div class="fn"><div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
           (g.status !== 'unknown' ? '<span class="gap-badge ' + g.status + '">' + badgeLabel + '</span>' : '') + '</div>' +
-          '<div class="fn-compare-row"><span class="fn-compare-label">Evidence</span><div class="bar"><span style="width:' + (g.evidencePct || 0) + '%"></span></div><span>' + (g.evidencePct !== null ? g.evidencePct + '%' : '—') + '</span></div>' +
-          '<div class="fn-compare-row"><span class="fn-compare-label">Confidence</span><div class="bar confidence"><span style="width:' + (g.confidencePct || 0) + '%"></span></div><span>' + (g.confidencePct !== null ? g.confidencePct + '%' : '—') + '</span></div>' +
+          renderConfidenceDumbbell(g) +
           '</div>';
       }).join('') +
     '</div>' +
@@ -1155,7 +1252,8 @@ export function renderReport() {
   // ---- 5. AI Tool Portfolio Review ----
   html += '<div class="section">' + sectionHeading(5, 'AI Tool Portfolio Review') +
     '<p class="b10-label" style="margin-bottom:6px;">Tool portfolio risk <span class="tool-badge ' + levelBadgeCls(toolPortfolioRisk.level) + '">' + levelBadgeLabel(toolPortfolioRisk.level) + '</span></p>' +
-    '<p class="qmeta" style="margin-bottom:12px;">' + toolPortfolioRisk.highRiskCount + ' high-risk, ' + toolPortfolioRisk.cautionCount + ' caution, ' + toolPortfolioRisk.lowerRiskCount + ' lower-risk, ' + toolPortfolioRisk.unclassifiedCount + ' unclassified.' + (toolPortfolioRisk.dataSensitive ? ' Weighted up for declared sensitive data types.' : '') + '</p>' +
+    renderCompositionBar(toolPortfolioRisk) +
+    '<p class="qmeta" style="margin:8px 0 12px;">' + toolPortfolioRisk.highRiskCount + ' high-risk, ' + toolPortfolioRisk.cautionCount + ' caution, ' + toolPortfolioRisk.lowerRiskCount + ' lower-risk, ' + toolPortfolioRisk.unclassifiedCount + ' unclassified.' + (toolPortfolioRisk.dataSensitive ? ' Weighted up for declared sensitive data types.' : '') + '</p>' +
     (state.toolsSelected.length > 0 || state.otherTools.length > 0 ? renderToolReview(toolAnalysis, state.profile) : '<p class="empty-tools">No tools declared.</p>') +
   '</div>';
 
@@ -1168,6 +1266,7 @@ export function renderReport() {
         return '<button class="fn drillable" type="button" data-drill="drill-panel-covfn-' + k + '" aria-expanded="false">' +
           '<div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3>' +
           '<span class="tier-pill ' + coverageTierCls(c.status) + '">' + coverageLabel(c.status) + '</span></div>' +
+          '<div class="bar"><span style="width:' + (c.pct || 0) + '%"></span></div>' +
           '<p class="fn-desc">' + (c.pct !== null ? c.pct + '%' : 'No data') + '</p><p class="drill-hint">Click for detail ▸</p></button>';
       }).join('') +
     '</div>' +

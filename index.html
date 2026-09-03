@@ -257,6 +257,82 @@
 
   .empty-tools { text-align: center; color: var(--text-muted); font-size: 13px; padding: 1rem; font-style: italic; }
 
+  /* ==========================================================================
+     VISUALIZATIONS: three purpose-built forms, each chosen for the job the
+     underlying data does -- never decorative. See src/ui.js's renderBulletGauge/
+     renderGateTick/renderConfidenceDumbbell/renderCompositionBar for the data-to-
+     form reasoning documented at each call site.
+     ========================================================================== */
+
+  /* Shared small legend row (color swatch + label), reused by the bullet gauge
+     and the composition bar so both read against the same visual grammar. */
+  .viz-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text-secondary); margin: 6px 0 0; }
+  .viz-legend .swatch { display: inline-flex; align-items: center; gap: 5px; }
+  .viz-legend .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+  .viz-legend .dot.band-high, .dot.seg-high { background: var(--danger-text); }
+  .viz-legend .dot.band-med, .dot.seg-caution { background: var(--warning-text); }
+  .viz-legend .dot.band-low, .dot.seg-low { background: var(--success-text); }
+  .viz-legend .dot.seg-unclassified { background: var(--text-muted); }
+
+  /* Bullet gauge (Stephen Few pattern): overall readiness against the same
+     three qualitative bands computeTier() already defines, so the reader sees
+     at a glance not just the number but how close it sits to the next tier. */
+  .bullet-gauge { margin: 8px 0 2px; }
+  .bullet-track { position: relative; display: flex; height: 12px; border-radius: 3px; overflow: hidden; }
+  .bullet-band { height: 100%; }
+  .bullet-band.band-high { background: var(--danger-bg); }
+  .bullet-band.band-med { background: var(--warning-bg); }
+  .bullet-band.band-low { background: var(--success-bg); }
+  .bullet-marker { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--text); transform: translateX(-50%); }
+
+  /* Gate-threshold tick: an annotation on the Ownership & Accountability bar
+     only, marking the exact score (40%) below which the gating rule caps the
+     overall score -- makes a rule that otherwise lives only in a paragraph of
+     text visible on the one bar it actually governs. */
+  .bar { position: relative; }
+  .bar .gate-tick { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger-text); }
+
+  /* Confidence-vs-evidence dumbbell: the two bars this replaced made the reader
+     subtract two lengths to find the gap. Here the gap between the two points
+     IS the mark, colored by direction (aligned/overconfident/underconfident) --
+     matching R16's own finding (research-r16-multi-rater-divergence.md) that a
+     perception/evidence gap should read as "worth investigating," not as one
+     side being simply wrong, hence a neutral connector rather than a red flag
+     on the confidence point itself. */
+  .dumbbell-legend { display: flex; gap: 16px; font-size: 10px; color: var(--text-muted); margin-bottom: 8px; }
+  .dumbbell-legend .mark { display: inline-flex; align-items: center; gap: 5px; }
+  .dumbbell-legend .mark-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--text-muted); }
+  .dumbbell-legend .mark-dot.ring { background: var(--surface); border: 2px solid var(--text-muted); width: 7px; height: 7px; }
+  .dumbbell-track { position: relative; height: 22px; margin: 2px 0; }
+  .dumbbell-track::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--border-strong); transform: translateY(-50%); }
+  .dumbbell-connector { position: absolute; top: 50%; height: 3px; border-radius: 1.5px; transform: translateY(-50%); opacity: 0.55; }
+  .dumbbell-connector.aligned { background: var(--success-text); }
+  .dumbbell-connector.overconfident { background: var(--warning-text); }
+  .dumbbell-connector.underconfident { background: var(--accent); }
+  .dumbbell-connector.unknown { background: var(--text-muted); }
+  .dumbbell-dot { position: absolute; top: 50%; width: 11px; height: 11px; border-radius: 50%; transform: translate(-50%, -50%); }
+  .dumbbell-dot.mark-evidence.aligned { background: var(--success-text); }
+  .dumbbell-dot.mark-evidence.overconfident { background: var(--warning-text); }
+  .dumbbell-dot.mark-evidence.underconfident { background: var(--accent); }
+  .dumbbell-dot.mark-evidence.unknown { background: var(--text-muted); }
+  .dumbbell-dot.mark-confidence { background: var(--surface); border: 2px solid; }
+  .dumbbell-dot.mark-confidence.aligned { border-color: var(--success-text); }
+  .dumbbell-dot.mark-confidence.overconfident { border-color: var(--warning-text); }
+  .dumbbell-dot.mark-confidence.underconfident { border-color: var(--accent); }
+  .dumbbell-dot.mark-confidence.unknown { border-color: var(--text-muted); }
+
+  /* Tool portfolio composition bar: a part-to-whole question (what share of the
+     declared inventory is high-risk/caution/lower-risk/unclassified), shown as
+     one 100%-stacked bar rather than a donut -- segment length is directly
+     comparable at a glance; arc angle in a donut is not, and the point of this
+     bar is specifically to make the high-risk share jump out first. */
+  .composition-bar { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; margin: 4px 0 2px; }
+  .composition-bar .seg { display: block; height: 100%; flex: 0 0 auto; }
+  .seg.seg-high { background: var(--danger-text); }
+  .seg.seg-caution { background: var(--warning-text); }
+  .seg.seg-low { background: var(--success-text); }
+  .seg.seg-unclassified { background: var(--text-muted); }
+
   .hidden { display: none; }
 </style>
 </head>
