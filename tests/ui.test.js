@@ -1228,3 +1228,52 @@ describe('DMAIC-structured recommendations (B16)', () => {
     expect(document.getElementById('stage-report').innerHTML).toContain('Define → Measure → Analyze → Improve → Control');
   });
 });
+
+describe('lower-risk tool alternative suggestions (B16b)', () => {
+  function primeReportState() {
+    state.scope = { id: 'org', name: '' };
+    state.role = { id: null, department: '' };
+    state.profile.orgType = 'for-profit';
+    state.profile.servesYouth = false;
+    state.depth = 'quick';
+    state.questions = getQuestionsForAssessment(state.profile, 'quick');
+    state.idx = 0;
+    state.answers = {};
+    state.confidenceAnswers = {};
+  }
+
+  it('shows a lower-risk alternative box on a caution-tier tool\'s card, with non-endorsement framing', () => {
+    primeReportState();
+    state.toolsSelected = ['t-anyword'];
+    state.profile.industry = 'retail';
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('Lower-risk alternative in the same category');
+    expect(html).toContain('Jasper');
+    expect(html).toContain('Not an endorsement or paid placement');
+  });
+
+  it('shows no alternative box for a tool whose category has no lower-risk entry', () => {
+    primeReportState();
+    state.toolsSelected = ['t-gamma']; // Presentations -- no lower-risk entry in this category
+    renderReport();
+    expect(document.getElementById('stage-report').innerHTML).not.toContain('Lower-risk alternative in the same category');
+  });
+
+  it('shows no alternative box for an already lower-risk tool', () => {
+    primeReportState();
+    state.toolsSelected = ['t-jasper']; // itself lower-risk
+    renderReport();
+    expect(document.getElementById('stage-report').innerHTML).not.toContain('Lower-risk alternative in the same category');
+  });
+
+  it('mentions industry-fit only when the alternative actually matched the declared industry', () => {
+    primeReportState();
+    state.toolsSelected = ['t-anyword'];
+    state.profile.industry = 'technology'; // no Marketing content lower-risk tool covers this
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('Lower-risk alternative in the same category');
+    expect(html).not.toContain('its declared industries include yours');
+  });
+});

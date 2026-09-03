@@ -59,6 +59,7 @@ import {
   explainDimension,
   explainFunctionScore,
   applyDmaicFraming,
+  buildToolAlternatives,
   GOVERNANCE_GATING_THRESHOLD,
   evaluateToolAdoption,
   describeToolAdoptionOutcome
@@ -1130,7 +1131,7 @@ export function renderReport() {
   html += '<div class="section">' + sectionHeading(5, 'AI Tool Portfolio Review') +
     '<p class="b10-label" style="margin-bottom:6px;">Tool portfolio risk <span class="tool-badge ' + levelBadgeCls(toolPortfolioRisk.level) + '">' + levelBadgeLabel(toolPortfolioRisk.level) + '</span></p>' +
     '<p class="qmeta" style="margin-bottom:12px;">' + toolPortfolioRisk.highRiskCount + ' high-risk, ' + toolPortfolioRisk.cautionCount + ' caution, ' + toolPortfolioRisk.lowerRiskCount + ' lower-risk, ' + toolPortfolioRisk.unclassifiedCount + ' unclassified.' + (toolPortfolioRisk.dataSensitive ? ' Weighted up for declared sensitive data types.' : '') + '</p>' +
-    (state.toolsSelected.length > 0 || state.otherTools.length > 0 ? renderToolReview(toolAnalysis) : '<p class="empty-tools">No tools declared.</p>') +
+    (state.toolsSelected.length > 0 || state.otherTools.length > 0 ? renderToolReview(toolAnalysis, state.profile) : '<p class="empty-tools">No tools declared.</p>') +
   '</div>';
 
   // ---- 6. Framework Coverage Mapping ----
@@ -1263,18 +1264,23 @@ export function triggerDownload(filename, content, mimeType) {
   URL.revokeObjectURL(url);
 }
 
-export function renderToolReview(analysis) {
+// B16b: `profile` is optional (existing callers that don't pass one still
+// work -- buildToolAlternatives handles a missing/empty profile the same as
+// "no industry declared"). alternatives is computed once per render, not
+// per card, since it's a single cheap pass over the flagged tools.
+export function renderToolReview(analysis, profile) {
+  var alternatives = buildToolAlternatives(analysis, profile);
   var html = '';
   if (analysis.flagged['high-risk'].length > 0) {
     html += '<div class="callout warning"><strong>High-risk tools flagged in your inventory.</strong> These tools have documented safety incidents, active litigation, or fundamental absence of organizational controls. Consider restricting use.</div>';
     analysis.flagged['high-risk'].forEach(function(t) {
-      html += renderToolCard(t);
+      html += renderToolCard(t, alternatives[t.id]);
     });
   }
   if (analysis.flagged['caution'].length > 0) {
     html += '<p style="font-size: 13px; color: var(--text-secondary); margin: 1rem 0 0.5rem;"><strong>Tools requiring caution.</strong> These have settings that should be verified before organizational use.</p>';
     analysis.flagged['caution'].forEach(function(t) {
-      html += renderToolCard(t);
+      html += renderToolCard(t, alternatives[t.id]);
     });
   }
   if (analysis.flagged['lower-risk'].length > 0) {
@@ -1293,7 +1299,12 @@ export function renderToolReview(analysis) {
   return html;
 }
 
-export function renderToolCard(t) {
+// alternative (B16b, optional): { tool, matchedIndustry } from
+// findLowerRiskAlternative(), or undefined for a tool with none -- rendered
+// as a distinctly-styled sub-block, never merged into tool-review-body,
+// so it's visually clear this is a separate, non-endorsement suggestion
+// about a DIFFERENT product, not more reasoning about the flagged one.
+export function renderToolCard(t, alternative) {
   return '<div class="tool-review">' +
     '<div class="tool-review-head">' +
       '<p class="tool-review-name">' + t.name + '</p>' +
@@ -1303,6 +1314,17 @@ export function renderToolCard(t) {
     '</div>' +
     '<p class="tool-review-body">' + t.reasoning + '</p>' +
     '<p class="tool-review-sources">Sources: ' + t.sources.join('; ') + ' • Last reviewed: ' + t.lastReviewed + '</p>' +
+    (alternative ? renderToolAlternative(alternative) : '') +
+  '</div>';
+}
+
+export function renderToolAlternative(alternative) {
+  var alt = alternative.tool;
+  return '<div class="tool-alt">' +
+    '<p class="tool-alt-label">Lower-risk alternative in the same category (' + escapeHtml(alt.category) + ')</p>' +
+    '<p class="tool-alt-body"><strong>' + escapeHtml(alt.name) + '</strong> is currently classified lower-risk in this category' +
+      (alternative.matchedIndustry ? ', and its declared industries include yours' : '') + '. ' +
+      'Not an endorsement or paid placement -- this is a same-category lookup within this tool\'s own reviewed inventory, not a recommendation to switch. Verify current fit and classification before acting; last reviewed ' + escapeHtml(alt.lastReviewed) + '.</p>' +
   '</div>';
 }
 

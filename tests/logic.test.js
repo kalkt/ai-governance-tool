@@ -38,7 +38,9 @@ import {
   explainDimension,
   explainFunctionScore,
   explainQuestion,
-  applyDmaicFraming
+  applyDmaicFraming,
+  findLowerRiskAlternative,
+  buildToolAlternatives
 } from '../src/logic.js';
 import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST, AGGREGATION_MIN_GROUP_SIZE, TOOL_ADOPTION_QUESTIONS } from '../src/data.js';
 
@@ -2216,5 +2218,88 @@ describe('applyDmaicFraming (B16)', () => {
     const framed = applyDmaicFraming(recs, questions, answers);
     expect(framed[0].dmaic.measure).toBe('No specific answer on file for this item.');
     expect(framed[0].dmaic.analyze).toBe('This sits in the ' + FRAMEWORK.functions.govern.name + ' function.');
+  });
+});
+
+// ============================================================================
+// B16b (optional): same-category, lower-risk tool alternative lookup.
+// Fixtures below use real TOOL_MASTER_LIST entries (Marketing content
+// category, verified 2026-09-02) rather than synthetic data, matching this
+// suite's existing convention (t-grok/t-chatgpt elsewhere) -- exercising the
+// tie-break and industry-preference logic against real, dated content.
+// ============================================================================
+
+describe('findLowerRiskAlternative (B16b)', () => {
+  it('returns null when the tool is already lower-risk -- nothing to suggest an alternative to', () => {
+    const tool = TOOL_MASTER_LIST.find(t => t.classification === 'lower-risk');
+    expect(findLowerRiskAlternative(tool, {})).toBeNull();
+  });
+
+  it('returns null (the graceful no-alternative-found fallback) when the category has no lower-risk entry at all', () => {
+    const tool = TOOL_MASTER_LIST.find(t => t.category === 'Presentations' && t.classification !== 'lower-risk');
+    expect(tool).toBeTruthy(); // sanity: the fixture premise (no lower-risk Presentations tool) still holds
+    expect(findLowerRiskAlternative(tool, {})).toBeNull();
+  });
+
+  it('with no industry match anywhere, falls back to the full same-category pool and tie-breaks by most-recently-reviewed then name', () => {
+    const anyword = TOOL_MASTER_LIST.find(t => t.id === 't-anyword');
+    const result = findLowerRiskAlternative(anyword, { industry: 'technology' }); // no Marketing content lower-risk tool covers 'technology'
+    expect(result).not.toBeNull();
+    expect(result.matchedIndustry).toBe(false);
+    expect(result.tool.id).toBe('t-copy-ai'); // 2026-08, alphabetically first among the 2026-08-tied candidates
+  });
+
+  it('prefers a candidate whose industries include the declared industry, even over one reviewed more recently', () => {
+    const anyword = TOOL_MASTER_LIST.find(t => t.id === 't-anyword');
+    const result = findLowerRiskAlternative(anyword, { industry: 'retail' }); // only t-jasper (2026-04) covers 'retail' in this category
+    expect(result.matchedIndustry).toBe(true);
+    expect(result.tool.id).toBe('t-jasper');
+  });
+
+  it('tie-breaks among multiple industry-matching candidates the same way as the full-pool fallback', () => {
+    const anyword = TOOL_MASTER_LIST.find(t => t.id === 't-anyword');
+    const result = findLowerRiskAlternative(anyword, { industry: 'media' }); // t-jasper, t-copy-ai, t-writer all cover 'media'
+    expect(result.matchedIndustry).toBe(true);
+    expect(result.tool.id).toBe('t-copy-ai');
+  });
+
+  it('never suggests the tool itself, and only from the same category', () => {
+    const anyword = TOOL_MASTER_LIST.find(t => t.id === 't-anyword');
+    const result = findLowerRiskAlternative(anyword, {});
+    expect(result.tool.id).not.toBe(anyword.id);
+    expect(result.tool.category).toBe(anyword.category);
+    expect(result.tool.classification).toBe('lower-risk');
+  });
+
+  it('handles a missing/empty profile the same as no industry declared', () => {
+    const anyword = TOOL_MASTER_LIST.find(t => t.id === 't-anyword');
+    expect(findLowerRiskAlternative(anyword, null)).not.toBeNull();
+    expect(findLowerRiskAlternative(anyword, {})).not.toBeNull();
+  });
+});
+
+describe('buildToolAlternatives (B16b)', () => {
+  it('returns one entry per flagged tool that has a real alternative, keyed by tool id, omitting the rest', () => {
+    const toolAnalysis = classifyToolsInUse(['t-anyword', 't-grok'], []);
+    const result = buildToolAlternatives(toolAnalysis, { industry: 'retail' });
+    expect(result['t-anyword']).toBeDefined();
+    expect(result['t-anyword'].tool.id).toBe('t-jasper');
+    // t-grok is General LLM, high-risk or caution depending on current review --
+    // whatever it is, only assert the shape, not a specific pick, to stay
+    // stable if that entry's own classification is re-reviewed later.
+    Object.keys(result).forEach(id => {
+      expect(result[id].tool).toBeTruthy();
+    });
+  });
+
+  it('returns an empty object when nothing flagged has an alternative', () => {
+    const toolAnalysis = classifyToolsInUse([], []);
+    expect(buildToolAlternatives(toolAnalysis, {})).toEqual({});
+  });
+
+  it('never includes an already-lower-risk tool as a key', () => {
+    const lowerRiskTool = TOOL_MASTER_LIST.find(t => t.classification === 'lower-risk');
+    const toolAnalysis = classifyToolsInUse([lowerRiskTool.id], []);
+    expect(buildToolAlternatives(toolAnalysis, {})).toEqual({});
   });
 });

@@ -1107,3 +1107,66 @@ export function applyDmaicFraming(recs, questions, answers) {
   });
 }
 
+// ============================================================================
+// B16b (optional candidate, proposed by Kartik 2026-08-30, backlog's own
+// note): when a declared tool is caution/high-risk, surface a same-category,
+// lower-risk alternative already in TOOL_MASTER_LIST -- an extension of the
+// existing AI Tool Portfolio Review section (B10/B14), not a new
+// architecture, per this item's own stated "natural home."
+//
+// The backlog's own four design constraints for this item, addressed here:
+// (1) same citation rigor as classifications themselves -- satisfied by
+//     construction: this only surfaces an ALREADY-classified, already-cited
+//     TOOL_MASTER_LIST entry, never a new claim about the alternative.
+// (2) a graceful no-alternative-found fallback -- returns null rather than
+//     forcing a suggestion; the UI renders nothing at all in that case
+//     rather than a manufactured "no alternative" callout, matching the
+//     backlog's own "forcing a recommendation would misrepresent the
+//     landscape" concern.
+// (3) explicit non-endorsement framing -- handled in the UI copy
+//     (src/ui.js), not this function; kept as a rendering concern.
+// (4) quality depends on real per-category tool density -- an inherent,
+//     honest limitation of the current inventory, not something this
+//     function can compensate for; a thin category will just correctly
+//     return null more often.
+// ============================================================================
+export function findLowerRiskAlternative(tool, profile) {
+  if (!tool || tool.classification === 'lower-risk') return null;
+
+  var candidates = TOOL_MASTER_LIST.filter(function(t) {
+    return t.id !== tool.id && t.category === tool.category && t.classification === 'lower-risk';
+  });
+  if (candidates.length === 0) return null;
+
+  var industryId = profile && profile.industry;
+  var industryMatches = industryId ? candidates.filter(function(t) {
+    return t.industries.indexOf('all') !== -1 || t.industries.indexOf(industryId) !== -1;
+  }) : [];
+  var pool = industryMatches.length > 0 ? industryMatches : candidates;
+
+  // Deterministic tie-break among multiple equally-valid candidates: most
+  // recently reviewed first (freshest data), then name for stability --
+  // never an arbitrary/undocumented "first in the array" pick.
+  var sorted = pool.slice().sort(function(a, b) {
+    if (a.lastReviewed !== b.lastReviewed) return a.lastReviewed < b.lastReviewed ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return { tool: sorted[0], matchedIndustry: industryMatches.length > 0 };
+}
+
+// Batch form for the report's AI Tool Portfolio Review section -- one lookup
+// per flagged (caution/high-risk) tool in the declared inventory, keyed by
+// tool id and omitting entries with no alternative (design constraint #2
+// above) rather than carrying nulls the UI would have to filter out itself.
+export function buildToolAlternatives(toolAnalysis, profile) {
+  var result = {};
+  ['high-risk', 'caution'].forEach(function(cls) {
+    toolAnalysis.flagged[cls].forEach(function(t) {
+      var alt = findLowerRiskAlternative(t, profile);
+      if (alt) result[t.id] = alt;
+    });
+  });
+  return result;
+}
+
