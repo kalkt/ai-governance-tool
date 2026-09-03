@@ -34,7 +34,7 @@ import {
   triggerDownload
 } from '../src/ui.js';
 import { getQuestionsForAssessment, identifyGaps, buildRecommendations } from '../src/logic.js';
-import { TOOL_MASTER_LIST, TOOL_ADOPTION_QUESTIONS, ANNEX_III_DOMAINS } from '../src/data.js';
+import { TOOL_MASTER_LIST, TOOL_ADOPTION_QUESTIONS, ANNEX_III_DOMAINS, METHODOLOGY_NOTES } from '../src/data.js';
 
 function setupDom() {
   document.body.innerHTML =
@@ -1275,5 +1275,83 @@ describe('lower-risk tool alternative suggestions (B16b)', () => {
     const html = document.getElementById('stage-report').innerHTML;
     expect(html).toContain('Lower-risk alternative in the same category');
     expect(html).not.toContain('its declared industries include yours');
+  });
+});
+
+describe('B17: the six quality standards implemented structurally', () => {
+  function primeReportState() {
+    state.scope = { id: 'org', name: '' };
+    state.role = { id: null, department: '' };
+    state.profile.orgType = 'for-profit';
+    state.profile.servesYouth = false;
+    state.depth = 'quick';
+    state.questions = getQuestionsForAssessment(state.profile, 'quick');
+    state.idx = 0;
+    state.answers = {};
+    state.questions.forEach(function(q) { state.answers[q.id] = 0; });
+    state.confidenceAnswers = {};
+  }
+
+  it('standard #1: the New AI Tool Adoption result screen shows the itemized answer breakdown behind its composite score', () => {
+    state.toolAdoption.companySize = '11-50';
+    state.toolAdoption.annexIiiDomainIds = [];
+    TOOL_ADOPTION_QUESTIONS.forEach(function(q) { state.toolAdoption.answers[q.id] = 2; });
+    renderToolAdoptionResult();
+    const html = document.getElementById('stage-tool-adoption-result').innerHTML;
+    expect(html).toContain('How this was scored');
+    TOOL_ADOPTION_QUESTIONS.forEach(function(q) {
+      expect(html).toContain(q.text);
+    });
+  });
+
+  it('standard #2: a Regulatory Exposure factor with no dated source is flagged as such', () => {
+    primeReportState();
+    state.profile.industry = 'healthcare'; // REGULATORY_INDUSTRY_NOTES factor has source: null
+    renderReport();
+    expect(document.getElementById('stage-report').innerHTML).toContain('not yet independently dated/sourced');
+  });
+
+  it('standard #2: an EU jurisdiction factor (which does carry a real citation) is not flagged', () => {
+    primeReportState();
+    state.profile.region = 'eu';
+    state.profile.industry = null;
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('EU AI Act');
+    expect(html).not.toContain('not yet independently dated/sourced');
+  });
+
+  it('standard #3: the recommendations list states its own ranking basis in plain language', () => {
+    primeReportState();
+    renderReport();
+    expect(document.getElementById('stage-report').innerHTML).toContain('Ranked with the critical, org-wide finding first');
+  });
+
+  it('standard #4: a recommendation\'s Control step names who typically owns follow-through at the declared org size', () => {
+    primeReportState();
+    state.profile.size = '1-10';
+    renderReport();
+    expect(document.getElementById('stage-report').innerHTML).toContain('At your declared organization size');
+  });
+
+  it('standard #5: the Assumptions & Limitations block lists the standing limitations', () => {
+    primeReportState();
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('Assumptions &amp; Limitations');
+    expect(html).toContain('72-subcategory');
+    expect(html).toContain('not a compliance certification');
+  });
+
+  it('standard #6: the Methodology & Sourcing panel starts hidden and reveals all six notes on click', () => {
+    primeReportState();
+    renderReport();
+    const panel = document.getElementById('drill-panel-methodology');
+    expect(panel.classList.contains('hidden')).toBe(true);
+    document.querySelector('[data-drill="drill-panel-methodology"]').click();
+    expect(panel.classList.contains('hidden')).toBe(false);
+    METHODOLOGY_NOTES.forEach(function(note) {
+      expect(panel.textContent).toContain(note.title);
+    });
   });
 });

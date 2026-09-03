@@ -29,7 +29,8 @@ import {
   ROLE_OPTIONS,
   ANNEX_III_DOMAINS,
   TOOL_ADOPTION_QUESTIONS,
-  GOVERNANCE_DIMENSIONS
+  GOVERNANCE_DIMENSIONS,
+  METHODOLOGY_NOTES
 } from './data.js';
 import {
   getApplicableModules,
@@ -62,7 +63,9 @@ import {
   buildToolAlternatives,
   GOVERNANCE_GATING_THRESHOLD,
   evaluateToolAdoption,
-  describeToolAdoptionOutcome
+  describeToolAdoptionOutcome,
+  explainToolAdoptionAnswers,
+  buildAssumptionsAndLimitations
 } from './logic.js';
 
 // ============================================================================
@@ -306,6 +309,13 @@ export function renderToolAdoptionResult() {
   var outcome = describeToolAdoptionOutcome(evaluation);
   var tierCls = (evaluation.tier.key === 'tier1' || evaluation.tier.key === 'tier2') ? 'tier-high' :
     (evaluation.tier.key === 'tier3' ? 'tier-med' : 'tier-low');
+  // B17 standard #1 (every score traces to specific responses): this result
+  // used to show only the tier/composite with no way to see which of the 9
+  // answers produced it -- unlike the Governance Readiness report, which
+  // already has this via B15. Always shown (not behind a click) since this
+  // is a single-tool result page, not a multi-section report -- 9 rows is
+  // short enough not to need collapsing.
+  var evidence = explainToolAdoptionAnswers(ta.answers);
 
   el('stage-tool-adoption-result').innerHTML = '' +
     '<div class="hero">' +
@@ -316,6 +326,12 @@ export function renderToolAdoptionResult() {
     '<p class="lede" style="margin-top: 0.75rem;">' + outcome.body + '</p>' +
     (evaluation.annexIiiDomainIds.length > 0 ?
       '<div class="callout warning">This use touches an EU AI Act Annex III high-risk domain, which is why it starts in the Tier 1/2 pair.</div>' : '') +
+    '<p class="b10-label" style="margin:16px 0 8px;">How this was scored (composite: ' + evaluation.compositeScore + ')</p>' +
+    '<ul class="drill-list">' +
+      evidence.map(function(e) {
+        return '<li><p class="drill-q">' + escapeHtml(e.text) + '</p><p class="qmeta">Answered: ' + escapeHtml(e.label || 'No answer on file') + '</p></li>';
+      }).join('') +
+    '</ul>' +
     '<div class="row" style="margin-top: 1.5rem;">' +
       '<button id="btn-restart-ta">Assess another tool</button>' +
     '</div>';
@@ -986,7 +1002,7 @@ export function renderReport() {
   // to the already-capped top-8 list, not the full gap set, so this can
   // never re-rank or add recommendations, only annotate the ones already
   // chosen.
-  var dmaicRecs = applyDmaicFraming(recs, state.questions, state.answers);
+  var dmaicRecs = applyDmaicFraming(recs, state.questions, state.answers, state.profile.size);
   var toolAnalysis = classifyToolsInUse(state.toolsSelected, state.otherTools);
   var modules = getApplicableModules(state.profile);
   var confidenceGap = computeConfidenceGap(scores, state.confidenceAnswers);
@@ -1121,8 +1137,17 @@ export function renderReport() {
         // ("Industry-specific regulation") to carry the actual citation, and
         // detail alone drops the short heading. Skip the redundant repeat
         // when they're identical (the simpler regulated-data-type factors).
+        // B17 standard #2 ("every regulatory claim cites a source with a
+        // date"): a factor with no `source` (the industry/data-type/gov-
+        // customer factors, none independently re-verified and dated the
+        // way the R4/R5/R6 jurisdiction findings were) gets flagged as such
+        // rather than presented with the same unqualified confidence as a
+        // sourced one -- the 'info'-level "no research done" factor already
+        // discloses its own gap in its own text, so it's excluded here.
         regulatoryExposure.factors.map(function(f) {
-          return '<li>' + (f.label === f.detail ? f.detail : '<strong>' + f.label + ':</strong> ' + f.detail) + '</li>';
+          var text = (f.label === f.detail ? f.detail : '<strong>' + f.label + ':</strong> ' + f.detail);
+          if (!f.source && f.level !== 'info') text += ' <em>(not yet independently dated/sourced -- see Assumptions &amp; Limitations)</em>';
+          return '<li>' + text + '</li>';
         }).join('') +
       '</ul>') +
   '</div>';
@@ -1170,7 +1195,8 @@ export function renderReport() {
   // Improve is the existing recommendation body, unsplit and unchanged.
   html += '<div class="section">' + sectionHeading(8, 'Prioritized Recommendations') +
     (dmaicRecs.length === 0 ? '<div class="callout">You have strong foundations. Lock in a quarterly review to keep governance current.</div>' :
-    '<p class="qmeta" style="margin-bottom:12px;">Each item below follows Define → Measure → Analyze → Improve → Control: what\'s wrong (the title), what the evidence shows, why it matters, what to do, and how to confirm it stays resolved.</p>' +
+    '<p class="qmeta" style="margin-bottom:12px;">Each item below follows Define → Measure → Analyze → Improve → Control: what\'s wrong (the title), what the evidence shows, why it matters, what to do, and how to confirm it stays resolved. ' +
+      'Ranked with the critical, org-wide finding first when one exists, then by severity -- no baseline before a partial one -- capped at the 8 most urgent items; a gap that didn\'t make this list isn\'t unimportant, just less urgent than what\'s shown.</p>' +
     dmaicRecs.map(function(r) {
       var cls = r.priority === 'critical' ? 'prio-critical' : (r.priority === 'high' ? 'prio-high' : (r.priority === 'medium' ? 'prio-med' : 'prio-low'));
       var plabel = r.priority === 'critical' ? 'Critical' : (r.priority === 'high' ? 'High priority' : (r.priority === 'medium' ? 'Medium priority' : 'Maintain'));
@@ -1205,6 +1231,42 @@ export function renderReport() {
       '<ul><li>Establish a quarterly governance review</li><li>Document a lightweight AI incident playbook</li><li>Add AI risk to standard vendor onboarding</li></ul>' +
     '</div></div></div>';
 
+  // ---- Assumptions & Limitations (B17 standard #5) ----
+  // Consolidates caveats that otherwise sit scattered one-per-section
+  // (Framework Coverage's function-level scope, the Risk Register's
+  // tool-level scope, an unsourced Regulatory Exposure factor if one
+  // exists) into one place a reader would actually check for limitations --
+  // "stated, not buried," not just present somewhere in the report. Not a
+  // numbered section (10 would contradict B14's own "exactly nine sections"
+  // framing) -- placed after the numbered body, replacing the old single-
+  // paragraph disclaimer this superseded.
+  html += '<div class="section">' +
+    '<h2>Assumptions &amp; Limitations</h2>' +
+    '<p class="qmeta" style="margin-bottom:8px;">Confidence: ' + confidenceNote + '</p>' +
+    '<ul class="phase ul" style="margin:0; padding-left:18px; font-size:13px; color:var(--text-secondary);">' +
+      buildAssumptionsAndLimitations(regulatoryExposure).map(function(item) { return '<li>' + item + '</li>'; }).join('') +
+    '</ul>' +
+  '</div>';
+
+  // ---- Methodology & Sourcing (B17 standard #6) ----
+  // Collapsed behind the same .drillable/.drill-panel toggle B15 already
+  // established (the generic delegated click handler at the bottom of this
+  // function already covers any element with this class, no new wiring
+  // needed) -- reference content someone reads once, not the first thing
+  // every viewer needs to see.
+  html += '<div class="section">' +
+    '<button class="drillable" type="button" data-drill="drill-panel-methodology" aria-expanded="false" style="text-align:left; display:block; width:100%;">' +
+      '<h2>Methodology &amp; Sourcing</h2>' +
+      '<p class="drill-hint">Why five weighted dimensions, why NIST AI RMF, and how this compares to published Big 4 frameworks -- click to expand ▸</p>' +
+    '</button>' +
+    '<div class="drill-panel hidden" id="drill-panel-methodology">' +
+      METHODOLOGY_NOTES.map(function(note) {
+        return '<div style="margin-bottom:12px;"><p class="b10-label" style="margin-bottom:4px;">' + escapeHtml(note.title) + '</p>' +
+          '<p style="font-size:13px; color:var(--text-secondary); margin:0;">' + escapeHtml(note.body) + '</p></div>';
+      }).join('') +
+    '</div>' +
+  '</div>';
+
   html += '<div class="row" style="margin-top: 1.5rem;">' +
     '<button id="btn-restart">Start over</button>' +
     '<div style="flex:1"></div>' +
@@ -1212,8 +1274,6 @@ export function renderReport() {
     '<button id="btn-export-csv">Export CSV</button>' +
     '<button id="btn-print" class="primary">Print or save as PDF</button>' +
   '</div>';
-
-  html += '<p class="disclaimer"><strong>About this tool.</strong> Built on the NIST AI Risk Management Framework (Govern, Map, Measure, Manage). Confidence: ' + confidenceNote + ' Tool classifications are point-in-time (last reviewed April 2026) and criteria-based. This is a self-assessment for internal planning, not a compliance certification or legal advice.</p>';
 
   el('stage-report').innerHTML = html;
 

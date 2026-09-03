@@ -40,9 +40,12 @@ import {
   explainQuestion,
   applyDmaicFraming,
   findLowerRiskAlternative,
-  buildToolAlternatives
+  buildToolAlternatives,
+  ownerForSize,
+  explainToolAdoptionAnswers,
+  buildAssumptionsAndLimitations
 } from '../src/logic.js';
-import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST, AGGREGATION_MIN_GROUP_SIZE, TOOL_ADOPTION_QUESTIONS } from '../src/data.js';
+import { REC_TITLES, REC_BODIES, FRAMEWORK, BASE_QUESTIONS, NONPROFIT_QUESTIONS, YOUTH_QUESTIONS, DEPARTMENTS, VISIBILITY_TAGS, GOVERNANCE_DIMENSIONS, ANNEX_III_DOMAINS, RISK_CRITERIA, RISK_TIERS, COMPANY_SIZE_BANDS, SMALL_ORG_SIZE_BANDS, OVERSIGHT_EXPECTATIONS, REGULATORY_INDUSTRY_NOTES, TOOL_MASTER_LIST, AGGREGATION_MIN_GROUP_SIZE, TOOL_ADOPTION_QUESTIONS, METHODOLOGY_NOTES } from '../src/data.js';
 
 describe('computeTier', () => {
   it('classifies a score of exactly 70 as low risk (lower boundary of the low tier)', () => {
@@ -2219,6 +2222,37 @@ describe('applyDmaicFraming (B16)', () => {
     expect(framed[0].dmaic.measure).toBe('No specific answer on file for this item.');
     expect(framed[0].dmaic.analyze).toBe('This sits in the ' + FRAMEWORK.functions.govern.name + ' function.');
   });
+
+  it('appends a size-appropriate ownership clause to Control when a company size is given (B17 standard #4)', () => {
+    const { questions, answers } = quickFixture(0);
+    const gaps = identifyGaps(questions, answers);
+    const recs = buildRecommendations(gaps);
+    const withSize = applyDmaicFraming(recs, questions, answers, '1-10');
+    const withoutSize = applyDmaicFraming(recs, questions, answers);
+    expect(withSize[0].dmaic.control).toContain('owner/executive');
+    expect(withoutSize[0].dmaic.control).not.toContain('At your declared organization size');
+  });
+
+  it('adds no ownership clause for an unrecognized company size', () => {
+    const { questions, answers } = quickFixture(0);
+    const gaps = identifyGaps(questions, answers);
+    const recs = buildRecommendations(gaps);
+    const framed = applyDmaicFraming(recs, questions, answers, 'not-a-real-size');
+    expect(framed[0].dmaic.control).not.toContain('At your declared organization size');
+  });
+});
+
+describe('ownerForSize (B17)', () => {
+  it('returns tier1\'s own per-size reviewer text for every real COMPANY_SIZE_BANDS entry', () => {
+    COMPANY_SIZE_BANDS.forEach(size => {
+      expect(ownerForSize(size)).toBe(OVERSIGHT_EXPECTATIONS.tier1[size].reviewer);
+    });
+  });
+
+  it('returns null for a missing or unrecognized size', () => {
+    expect(ownerForSize(undefined)).toBeNull();
+    expect(ownerForSize('not-a-real-size')).toBeNull();
+  });
 });
 
 // ============================================================================
@@ -2301,5 +2335,107 @@ describe('buildToolAlternatives (B16b)', () => {
     const lowerRiskTool = TOOL_MASTER_LIST.find(t => t.classification === 'lower-risk');
     const toolAnalysis = classifyToolsInUse([lowerRiskTool.id], []);
     expect(buildToolAlternatives(toolAnalysis, {})).toEqual({});
+  });
+});
+
+// ============================================================================
+// B17: the six quality standards, implemented structurally (backlog SS1.4.9)
+// ============================================================================
+
+describe('explainToolAdoptionAnswers (B17 standard #1)', () => {
+  it('returns one row per answered question, with the given answer\'s label', () => {
+    const answers = { materiality: 2, 'ma-adopt-1': 3 };
+    const rows = explainToolAdoptionAnswers(answers);
+    expect(rows.length).toBe(2);
+    const materialityRow = rows.find(r => r.id === 'materiality');
+    expect(materialityRow.kind).toBe('risk-criteria');
+    expect(materialityRow.v).toBe(2);
+    expect(materialityRow.label).toBe(TOOL_ADOPTION_QUESTIONS.find(q => q.id === 'materiality').options.find(o => o.v === 2).label);
+  });
+
+  it('excludes unanswered questions', () => {
+    expect(explainToolAdoptionAnswers({})).toEqual([]);
+  });
+
+  it('covers all 9 questions when every one is answered', () => {
+    const answers = {};
+    TOOL_ADOPTION_QUESTIONS.forEach(q => { answers[q.id] = 1; });
+    expect(explainToolAdoptionAnswers(answers).length).toBe(9);
+  });
+});
+
+describe('buildAssumptionsAndLimitations (B17 standard #5)', () => {
+  const sourcedExposure = { level: 'high', factors: [{ id: 'eu-ai-act', level: 'high', label: 'EU AI Act', detail: '...', source: 'R4' }] };
+  const unsourcedExposure = { level: 'medium', factors: [{ id: 'industry-healthcare', level: 'medium', label: 'Industry-specific regulation', detail: '...', source: null }] };
+  const infoOnlyExposure = { level: 'info', factors: [{ id: 'no-dedicated-research', level: 'info', label: 'No dedicated regulatory research completed for this region yet', detail: '...', source: null }] };
+
+  it('always includes the four standing limitations', () => {
+    const items = buildAssumptionsAndLimitations(sourcedExposure);
+    expect(items.some(i => i.includes('72-subcategory'))).toBe(true);
+    expect(items.some(i => i.includes('per-use-case Tier 1-4 register'))).toBe(true);
+    expect(items.some(i => i.includes('point-in-time'))).toBe(true);
+    expect(items.some(i => i.includes('not a compliance certification'))).toBe(true);
+  });
+
+  it('does not flag a citation gap when every factor is properly sourced', () => {
+    const items = buildAssumptionsAndLimitations(sourcedExposure);
+    expect(items.some(i => i.includes('without a dated citation'))).toBe(false);
+  });
+
+  it('flags a citation gap, naming the specific unsourced factor, when one exists', () => {
+    const items = buildAssumptionsAndLimitations(unsourcedExposure);
+    const flag = items.find(i => i.includes('without a dated citation'));
+    expect(flag).toBeTruthy();
+    expect(flag).toContain('Industry-specific regulation');
+  });
+
+  it('does not treat an honest info-level "no research done" factor as a citation gap needing its own flag', () => {
+    const items = buildAssumptionsAndLimitations(infoOnlyExposure);
+    expect(items.some(i => i.includes('without a dated citation'))).toBe(false);
+  });
+});
+
+describe('METHODOLOGY_NOTES data integrity (B17 standard #6)', () => {
+  it('has a unique, non-empty id/title/body for every entry', () => {
+    const ids = new Set();
+    METHODOLOGY_NOTES.forEach(note => {
+      expect(ids.has(note.id)).toBe(false);
+      ids.add(note.id);
+      expect(note.title.length).toBeGreaterThan(0);
+      expect(note.body.length).toBeGreaterThan(20);
+    });
+  });
+
+  it('covers the five research findings this standard is explicitly grounded in', () => {
+    const ids = METHODOLOGY_NOTES.map(n => n.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      'five-dimensions', 'gating-rule', 'four-tier-risk-model', 'why-nist', 'differentiation', 'visibility-taxonomy'
+    ]));
+  });
+
+  it('the four-tier risk model note explicitly disclaims any measured tier-distribution stat', () => {
+    const note = METHODOLOGY_NOTES.find(n => n.id === 'four-tier-risk-model');
+    expect(note.body).toMatch(/no measured prevalence data/);
+  });
+
+  it('the visibility-taxonomy note explicitly rules out the academic Information Visibility Scale as its evidence base', () => {
+    const note = METHODOLOGY_NOTES.find(n => n.id === 'visibility-taxonomy');
+    expect(note.body).toContain('Information Visibility Scale');
+    expect(note.body).toMatch(/NOT supported by/);
+  });
+});
+
+describe('buildReportExport includes B17 content (standards #5/#6)', () => {
+  it('carries methodologyNotes and assumptionsAndLimitations through', () => {
+    const regulatoryExposure = { level: 'low', factors: [], aiMaturity: null };
+    const scores = computeScores([], {});
+    const report = buildReportExport({
+      profile: {}, scope: {}, role: {}, depth: 'quick', scores, tier: computeTier(scores.overall),
+      recs: [], toolAnalysis: classifyToolsInUse([], []), regulatoryExposure,
+      toolPortfolioRisk: computeToolPortfolioRisk([], [], {}), frameworkCoverage: computeFrameworkCoverage(scores),
+      confidenceGap: {}
+    });
+    expect(report.methodologyNotes).toEqual(METHODOLOGY_NOTES);
+    expect(report.assumptionsAndLimitations).toEqual(buildAssumptionsAndLimitations(regulatoryExposure));
   });
 });

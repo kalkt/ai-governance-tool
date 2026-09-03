@@ -18,7 +18,9 @@ import {
   OVERSIGHT_EXPECTATIONS,
   REGULATORY_INDUSTRY_NOTES,
   VISIBILITY_TAGS,
-  AGGREGATION_MIN_GROUP_SIZE
+  AGGREGATION_MIN_GROUP_SIZE,
+  TOOL_ADOPTION_QUESTIONS,
+  METHODOLOGY_NOTES
 } from './data.js';
 
 export function getApplicableModules(profile) {
@@ -825,6 +827,20 @@ export function describeToolAdoptionOutcome(evaluation) {
   return { headline: headline, body: body };
 }
 
+// B17 standard #1 (every score traces to specific responses): the New AI
+// Tool Adoption result screen showed a tier and composite score with no way
+// to see which of the 9 answers produced it -- unlike the Governance
+// Readiness report, which B15 already made fully traceable. Same pattern
+// as B15's explain* family, applied to this assessment's own question bank.
+export function explainToolAdoptionAnswers(answers) {
+  return TOOL_ADOPTION_QUESTIONS.filter(function(q) { return answers[q.id] !== undefined; })
+    .map(function(q) {
+      var v = answers[q.id];
+      var opt = q.options.find(function(o) { return o.v === v; });
+      return { id: q.id, text: q.text, kind: q.kind, v: v, label: opt ? opt.label : null };
+    });
+}
+
 // ============================================================================
 // B14: nine-section report rebuild (backlog SS1.4.8) -- these two functions
 // assemble already-computed report data into a clean, exportable shape (JSON)
@@ -876,10 +892,35 @@ export function buildRiskRegister(toolAnalysis) {
 // values renderReport() builds for on-screen display -- this function adds
 // no new computation, just assembles them into one clean, stable shape safe
 // to JSON.stringify and hand to a user.
+// B17 standard #5 (assumptions and limitations stated, not buried):
+// consolidates limitations that otherwise sit scattered, one per report
+// section, into a single list -- the JSON export's version of the report's
+// own "Assumptions & Limitations" block (src/ui.js). The unsourced-
+// regulatory-factor line is conditional (standard #2): only included when
+// computeRegulatoryExposure() actually produced a factor lacking a real
+// dated source, so this doesn't assert a caveat that isn't true for a given
+// report (e.g. a report with only EU/US/Canada jurisdiction factors, all of
+// which DO carry R4/R5/R6 citations, shouldn't imply otherwise).
+export function buildAssumptionsAndLimitations(regulatoryExposure) {
+  var items = [
+    'Framework Coverage is measured at NIST-function level, not the full 72-subcategory breakdown.',
+    'The Risk Register lists tool-level classifications, not a per-use-case Tier 1-4 register -- that needs the New AI Tool Adoption assessment run per declared tool.',
+    'Tool classifications are point-in-time (see each tool\'s own "last reviewed" date) and criteria-based.',
+    'This is a self-assessment for internal planning, not a compliance certification or legal advice.'
+  ];
+  var unsourced = (regulatoryExposure.factors || []).filter(function(f) { return !f.source && f.level !== 'info'; });
+  if (unsourced.length > 0) {
+    items.splice(2, 0, 'Regulatory Exposure factors without a dated citation (' + unsourced.map(function(f) { return f.label; }).join(', ') + ') reflect well-established frameworks but have not yet been independently re-verified and dated the way the EU/US/Canada jurisdiction findings have -- treat them as directional, not confirmed citations, until that research is done.');
+  }
+  return items;
+}
+
 export function buildReportExport(input) {
   return {
     generatedAt: new Date().toISOString(),
     methodology: 'NIST AI Risk Management Framework (Govern/Map/Measure/Manage). Governance Maturity is a weighted average of five sub-dimensions with an Ownership & Accountability gating rule -- see this project\'s own published methodology notes, not a NIST-defined score.',
+    methodologyNotes: METHODOLOGY_NOTES,
+    assumptionsAndLimitations: buildAssumptionsAndLimitations(input.regulatoryExposure),
     assessment: {
       scope: input.scope,
       role: input.role,
@@ -1071,7 +1112,22 @@ export function explainQuestion(questions, answers, questionId) {
 // decide-and-document authored copy (same discipline as B4/B7/B10/B13's own)
 // -- a priority-based re-check cadence, not a per-question claim.
 // ============================================================================
-export function applyDmaicFraming(recs, questions, answers) {
+// B17 standard #4 (size/maturity-calibrated recommendations): reuses
+// OVERSIGHT_EXPECTATIONS.tier1's own per-size reviewer language -- the
+// already-established, already-cited size-band-to-governance-structure
+// mapping (SS1.4.6/R3) -- rather than inventing a second, parallel size
+// taxonomy just for this. Tier1's reviewer progression (owner-led informal
+// at 1-10, through full governance function at 1000+) already IS that
+// general structure; reused here for "who typically owns follow-through on
+// ANY governance gap at this size," not specifically a Tier 1 AI use case.
+// Returns null for a missing/unrecognized size rather than guessing.
+export function ownerForSize(companySize) {
+  var entry = OVERSIGHT_EXPECTATIONS.tier1[companySize];
+  return entry ? entry.reviewer : null;
+}
+
+export function applyDmaicFraming(recs, questions, answers, companySize) {
+  var owner = ownerForSize(companySize);
   return recs.map(function(r) {
     var measure, analyze;
 
@@ -1100,6 +1156,7 @@ export function applyDmaicFraming(recs, questions, answers) {
     var control = (r.priority === 'critical' || r.priority === 'high') ?
       'Re-check this at your next quarterly review -- treat it as unresolved until you can point to a specific artifact.' :
       'Revisit at your next standard governance review (recommended at least annually) to confirm it has actually been addressed.';
+    if (owner) control += ' At your declared organization size, that typically falls to ' + owner.toLowerCase() + '.';
 
     return Object.assign({}, r, {
       dmaic: { measure: measure, analyze: analyze, improve: r.body, control: control }
