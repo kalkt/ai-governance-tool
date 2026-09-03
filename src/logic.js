@@ -57,8 +57,28 @@ export function getQuestionsForAssessment(profile, depth, role) {
   var byDepth = pool.filter(function(q) { return q.depths.indexOf(depth) !== -1; });
   if (!role) return byDepth;
   var allowedTags = getVisibilityTagsForRole(role);
+  var passesTag = function(q) { return !q.visibilityTag || allowedTags.indexOf(q.visibilityTag) !== -1; };
+
+  // B17b safety net: the `depths` axis (pre-existing) and the `visibilityTag`
+  // axis (B9) were built and tested independently, and their interaction was
+  // never validated to guarantee at least one question per NIST function --
+  // for some role/department combinations (confirmed: MANAGE/GOVERN at Quick
+  // depth for most non-Leadership/Legal/IT-Engineering respondents, before
+  // this item's companion content fix widened g3/ma5's depths), tag-filtering
+  // alone could drop a whole function to zero questions, which computeScores()
+  // then can't score at all (max stays 0) -- worse than surfacing a
+  // role-imperfect question. Count passing questions per function first; a
+  // function with zero passing questions falls back to its full depth-
+  // available pool for that function specifically (still visibility-tag-
+  // filtered for every OTHER function). This makes the filter self-healing
+  // against the same class of gap if future item-bank tagging changes
+  // reintroduce it, independent of the content fix above.
+  var passingCountByFn = {};
+  byDepth.forEach(function(q) {
+    if (passesTag(q)) passingCountByFn[q.fn] = (passingCountByFn[q.fn] || 0) + 1;
+  });
   return byDepth.filter(function(q) {
-    return !q.visibilityTag || allowedTags.indexOf(q.visibilityTag) !== -1;
+    return passesTag(q) || !passingCountByFn[q.fn];
   });
 }
 
@@ -437,8 +457,13 @@ export function computeConfidenceGap(scores, confidenceAnswers) {
   var result = {};
   Object.keys(FRAMEWORK.functions).forEach(function(fn) {
     var s = scores.fnScores[fn];
-    // Defensive: base questions always cover all four functions at every depth,
-    // so max is never 0 in practice. Mirrors the getQuestionsForAssessment guard above.
+    // Defensive, and a real (if now rare) case, not just a formality: B17b
+    // found role-based visibility filtering (B8/B9/B11) could drop a whole
+    // function to zero questions for some role/department combinations --
+    // this guard predates that discovery and was originally written on the
+    // now-false assumption that max is never 0 in practice. The
+    // getQuestionsForAssessment safety net (B17b) makes this genuinely rare
+    // again, but this null-guard stays as real defense, not dead code.
     var evidencePct = s.max === 0 ? null : Math.round((s.sum / s.max) * 100);
     var v = confidenceAnswers[fn];
     var confidencePct = v === undefined ? null : Math.round(((v - 1) / 4) * 100);

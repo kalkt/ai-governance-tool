@@ -439,7 +439,15 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'A specific person, but not documented' },
       { v: 3, label: 'A named owner with documented responsibility' }
     ]},
-  { id: 'g3', fn: 'govern', module: 'base', dimension: 'controls-evidence', visibilityTag: 'operational', depths: ['standard','comprehensive'],
+  // B17b fix: depths widened from ['standard','comprehensive'] to include
+  // 'quick' -- g1/g2 are GOVERN's only Quick-depth items and both are
+  // 'strategic'-tagged, so any non-Leadership/Legal/IT-Engineering
+  // respondent saw zero GOVERN questions at Quick depth (getVisibilityTagsForRole
+  // grants 'operational' by default, not 'strategic'). Reuses this
+  // already-reviewed item verbatim -- no new content authored, no retagging,
+  // matching MAP/MEASURE's existing quick-depth 'operational' pattern (m1/
+  // m2/me1/me2). See backlog B17b for the full root-cause analysis.
+  { id: 'g3', fn: 'govern', module: 'base', dimension: 'controls-evidence', visibilityTag: 'operational', depths: ['quick','standard','comprehensive'],
     text: 'Does your organization maintain a formal approval process prior to adopting new AI tools?',
     options: [
       { v: 0, label: 'No formal process; teams adopt tools at their own discretion' },
@@ -579,7 +587,13 @@ export const BASE_QUESTIONS = [
       { v: 2, label: 'An informal path exists but has not been published' },
       { v: 3, label: 'Documented appeal process' }
     ]},
-  { id: 'ma5', fn: 'manage', module: 'base', dimension: 'monitoring-response', visibilityTag: 'operational', depths: ['comprehensive'],
+  // B17b fix: depths widened from ['comprehensive'] to include 'quick' and
+  // 'standard' -- ma5 was MANAGE's only 'operational'-tagged item at any
+  // depth, so any non-Leadership/Legal/IT-Engineering respondent saw zero
+  // MANAGE questions at Quick or Standard depth. Reuses this already-
+  // reviewed item verbatim -- no new content authored, no retagging. See
+  // backlog B17b for the full root-cause analysis.
+  { id: 'ma5', fn: 'manage', module: 'base', dimension: 'monitoring-response', visibilityTag: 'operational', depths: ['quick','standard','comprehensive'],
     text: "Does your organization review its AI risk posture following a significant change?",
     hint: 'For example, a new tool, a new use case, a new regulation, or a major incident.',
     options: [

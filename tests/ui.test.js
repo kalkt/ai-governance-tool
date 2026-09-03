@@ -1355,3 +1355,26 @@ describe('B17: the six quality standards implemented structurally', () => {
     });
   });
 });
+
+describe('B17b: no misleading "0%" for a zero-question NIST function', () => {
+  it('renders "No data" on the Governance Score Breakdown\'s By-NIST-function bar when a function has zero questions', () => {
+    state.scope = { id: 'org', name: '' };
+    state.role = { id: null, department: '' };
+    state.profile.orgType = 'for-profit';
+    state.profile.servesYouth = false;
+    state.depth = 'quick';
+    // Directly construct a scenario with zero MANAGE questions -- the exact
+    // shape the pre-B17b bug rendered as a misleading "0%" bar -- bypassing
+    // getQuestionsForAssessment (which the B17b safety net now protects)
+    // to confirm the *rendering* fix independently of the filtering fix.
+    state.questions = getQuestionsForAssessment(state.profile, 'quick').filter(function(q) { return q.fn !== 'manage'; });
+    state.idx = 0;
+    state.answers = {};
+    state.questions.forEach(function(q) { state.answers[q.id] = 2; });
+    state.confidenceAnswers = {};
+    renderReport();
+    const html = document.getElementById('stage-report').innerHTML;
+    expect(html).toContain('No data');
+    expect(html).not.toMatch(/Manage<\/h3><span class="fn-score">0%/);
+  });
+});

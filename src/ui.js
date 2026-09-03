@@ -1194,10 +1194,17 @@ export function renderReport() {
     '<div class="fn-grid">' +
       Object.keys(FRAMEWORK.functions).map(function(k) {
         var s = scores.fnScores[k];
-        var pct = s.max === 0 ? 0 : Math.round((s.sum / s.max) * 100);
+        // B17b fix: max === 0 means no question for this function was ever
+        // asked (a real, if now rare post-safety-net, possibility) -- that
+        // is "no data," not "the org scored zero," and rendering a literal
+        // 0% bar was indistinguishable from the latter. Matches Framework
+        // Coverage Mapping's own already-correct null/"No data" handling
+        // (computeFrameworkCoverage, B10) instead of asserting a score that
+        // was never actually measured.
+        var pct = s.max === 0 ? null : Math.round((s.sum / s.max) * 100);
         return '<button class="fn drillable" type="button" data-drill="drill-panel-scorefn-' + k + '" aria-expanded="false">' +
-          '<div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3><span class="fn-score">' + pct + '%</span></div>' +
-          '<div class="bar"><span style="width:' + pct + '%"></span></div>' +
+          '<div class="fn-top"><h3>' + FRAMEWORK.functions[k].name + '</h3><span class="fn-score">' + (pct !== null ? pct + '%' : 'No data') + '</span></div>' +
+          '<div class="bar"><span style="width:' + (pct || 0) + '%"></span></div>' +
           '<p class="fn-desc">' + FRAMEWORK.functions[k].desc + '</p><p class="drill-hint">Click for detail ▸</p></button>';
       }).join('') +
     '</div>' +
